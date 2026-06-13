@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, existsSync, renameSync } from 'fs';
+import { readFileSync, existsSync, renameSync, mkdirSync } from 'fs';
 import { Agent } from './src/agent.js';
 import { Memory } from './src/memory.js';
 import { ProjectScanner } from './src/scanner.js';
@@ -161,7 +161,6 @@ app.listen(PORT, '0.0.0.0', () => {
 
 // Upload folder
 import multer from 'multer';
-import { mkdirSync } from 'fs';
 
 const upload = multer({ dest: '/tmp/uploads/' });
 
