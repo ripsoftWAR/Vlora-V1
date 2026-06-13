@@ -1,0 +1,38 @@
+{
+  "name": "project-analyst-agent",
+  "version": "1.0.0",
+  "description": "AI Agent untuk analisis mendalam project code dan UI/UX menggunakan NVIDIA NIM",
+  "type": "module",
+  "scripts": {
+    "start": "next start",
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "next lint"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.3.0",
+    "axios": "^1.17.0",
+    "chart.js": "^4.5.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "lucide-react": "^1.17.0",
+    "multer": "^2.1.1",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3"
+  }
+}

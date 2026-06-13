@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "aiq-deploy": {
+      "source": "NVIDIA/skills",
+      "sourceType": "github",
+      "skillPath": "skills/aiq-deploy/SKILL.md",
+      "computedHash": "f18d4d7dcc639775f7f1ceffbca1941f9d098bb8382068a54119ed9cd5ed4c83"
+    },
+    "nemo-retriever": {
+      "source": "NVIDIA/skills",
+      "sourceType": "github",
+      "skillPath": "skills/nemo-retriever/SKILL.md",
+      "computedHash": "928da8c720b2eb54054b15676c9217ccc162b1827c8b89c6695e37adb629c86d"
+    },
+    "rag-blueprint": {
+      "source": "NVIDIA/skills",
+      "sourceType": "github",
+      "skillPath": "skills/rag-blueprint/SKILL.md",
+      "computedHash": "5c057a857193fdd137a8f040cfb95cf033c74fbc27eb5346c5255a5b34e1459b"
+    },
+    "rag-eval": {
+      "source": "NVIDIA/skills",
+      "sourceType": "github",
+      "skillPath": "skills/rag-eval/SKILL.md",
+      "computedHash": "5e11b2d28098f4504c60501dba2b7c4d916b413cfbc9d4b0d1efa13fe1f0f8b3"
+    }
+  }
+}
