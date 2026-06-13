@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, renameSync } from 'fs';
 import { Agent } from './src/agent.js';
 import { Memory } from './src/memory.js';
 import { ProjectScanner } from './src/scanner.js';
@@ -30,7 +30,7 @@ const apiKey =
 if (!apiKey) {
   console.error(`❌ API key tidak ditemukan untuk provider "${provider}"`);
   console.error('   Isi file .env di folder ini');
-  process.exit(1);
+  console.warn('⚠️  Lanjut tanpa API key');
 }
 
 const app  = express();
@@ -155,7 +155,7 @@ app.get('/api/health', (_, res) => {
   res.json({ ok: true, provider, projectPath });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend Agent JALAN di http://localhost:${PORT}`);
 });
 
@@ -172,7 +172,7 @@ app.post('/api/upload-folder', upload.array('files'), async (req, res) => {
     for (const file of req.files) {
       const destPath = path.join(uploadPath, file.originalname);
       mkdirSync(path.dirname(destPath), { recursive: true });
-      await fs.rename(file.path, destPath);
+      renameSync(file.path, destPath);
     }
     
     // Re-init scanner ke folder baru
