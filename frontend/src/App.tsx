@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
+
 declare module 'react' {
   interface InputHTMLAttributes<T> {
     webkitdirectory?: string;
@@ -115,6 +116,7 @@ function FileTree({ nodes, depth = 0 }: { nodes: FileNode[]; depth?: number }) {
   );
 }
 
+
 const FALLBACK_FILES: FileNode[] = [
   {
     name: 'src', type: 'dir', children: [
@@ -156,13 +158,13 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
+  
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
-    axios.get('http://localhost:5000/api/project')
+    axios.get('' + import.meta.env.VITE_API_URL + '/api/project')
       .then((r: { data: ProjectInfo & { files?: FileNode[] } }) =>
         setProject({ ...r.data, files: r.data.files || FALLBACK_FILES })
       )
@@ -176,7 +178,7 @@ export default function App() {
     Array.from(files).forEach(f => formData.append('files', f, f.webkitRelativePath));
     setStatus('scanning');
     try {
-      const res = await axios.post('http://localhost:5000/api/upload-folder', formData, {
+      const res = await axios.post('' + import.meta.env.VITE_API_URL + '/api/upload-folder', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setProject({ ...res.data, files: res.data.files || FALLBACK_FILES });
@@ -203,7 +205,7 @@ export default function App() {
     setStatus('coding');
 
     try {
-      const res = await axios.post('http://localhost:5000/api/analyze', { query });
+      const res = await axios.post('' + import.meta.env.VITE_API_URL + '/api/analyze', { query });
       const { text: reply, toolCalls } = res.data;
       const ts2 = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
       setMessages(p => [...p, {
