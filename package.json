@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "next dev",
-    "build": "next build",
+    "build": "echo 'backend - no build needed'",
     "lint": "next lint"
   },
   "engines": {
