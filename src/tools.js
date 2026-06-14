@@ -76,11 +76,32 @@ export function buildTools(scanner) {
         if (!existsSync(fullPath)) return `❌ File "${file_path}" tidak ditemukan`;
 
         const original = await fs.readFile(fullPath, 'utf-8');
-        const count = original.split(old_str).length - 1;
-
+        // Normalize line endings & trim whitespace
+        const norm = (s) => s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const trimLines = (s) => s.split('\n').map(l => l.trimEnd()).join('\n');
+        const normalOrig = norm(original);
+        const normalOld = norm(old_str);
+        const normalNew = norm(new_str);
+        // Exact match
+        let count = normalOrig.split(normalOld).length - 1;
+        if (count === 1) {
+          const updated = normalOrig.replace(normalOld, normalNew);
+          await fs.writeFile(fullPath, updated, 'utf-8');
+          scanner._cache?.delete(fullPath);
+          return `✅ Edit berhasil di "${file_path}"`;
+        }
+        // Fallback trim
+        const trimOrig = trimLines(normalOrig);
+        const trimOld = trimLines(normalOld);
+        count = trimOrig.split(trimOld).length - 1;
+        if (count === 1) {
+          const updated = trimOrig.replace(trimOld, normalNew);
+          await fs.writeFile(fullPath, updated, 'utf-8');
+          scanner._cache?.delete(fullPath);
+          return `✅ Edit berhasil di "${file_path}" (trim-match)`;
+        }
         if (count === 0) return `❌ Teks tidak ditemukan di "${file_path}". Pastikan exact match.`;
-        if (count > 1) return `❌ Teks ditemukan ${count}x — terlalu ambigu. Perluas konteks old_str agar unik.`;
-
+        if (count > 1) return `❌ Teks ditemukan ${count}x — terlalu ambigu.`;
         const updated = original.replace(old_str, new_str);
         await fs.writeFile(fullPath, updated, 'utf-8');
         scanner._cache.delete(fullPath);

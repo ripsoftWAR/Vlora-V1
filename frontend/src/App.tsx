@@ -149,6 +149,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [project, setProject] = useState<ProjectInfo>({
     totalFiles: 0, techStack: [], skills: [], files: FALLBACK_FILES,
@@ -197,6 +198,7 @@ export default function App() {
     setMessages(p => [...p, { role: 'user', content: query, timestamp: ts }]);
     setInput('');
     setLoading(true);
+    setIsLoading(true);
     setSidebarOpen(false);
 
     setStatus('scanning'); await delay(450);
@@ -222,6 +224,7 @@ export default function App() {
     } finally {
       setStatus('idle');
       setLoading(false);
+      setIsLoading(false);
       textareaRef.current?.focus();
     }
   };
@@ -895,33 +898,42 @@ export default function App() {
                   overflow: 'auto', outline: 'none',
                 }}
               />
-              <button
-                onClick={() => handleSend()}
-                disabled={loading || !input.trim()}
-                style={{
-                  width: 34, height: 34, borderRadius: 10, border: 'none',
-                  background: loading || !input.trim()
-                    ? 'rgba(255,255,255,0.06)'
-                    : 'linear-gradient(135deg, #6366f1, #3b82f6)',
-                  color: loading || !input.trim() ? 'rgba(255,255,255,0.2)' : '#fff',
-                  cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16, flexShrink: 0,
-                  transition: 'all 0.18s',
-                  boxShadow: loading || !input.trim()
-                    ? 'none'
-                    : '0 0 14px rgba(99,102,241,0.35)',
-                }}
-                onMouseEnter={e => {
-                  if (!loading && input.trim()) {
-                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.05)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
-                }}
-                aria-label="Kirim"
-              >↑</button>
+              <>
+                <button
+                  onClick={() => handleSend()}
+                  disabled={loading || !input.trim()}
+                  style={{
+                    width: 34, height: 34, borderRadius: 10, border: 'none',
+                    background: loading || !input.trim()
+                      ? 'rgba(255,255,255,0.06)'
+                      : 'linear-gradient(135deg, #6366f1, #3b82f6)',
+                    color: loading || !input.trim() ? 'rgba(255,255,255,0.2)' : '#fff',
+                    cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 16, flexShrink: 0,
+                    transition: 'all 0.18s',
+                    boxShadow: loading || !input.trim()
+                      ? 'none'
+                      : '0 0 14px rgba(99,102,241,0.35)',
+                  }}
+                  onMouseEnter={e => {
+                    if (!loading && input.trim()) {
+                      (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.05)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+                  }}
+                  aria-label="Kirim"
+                >↑</button>
+                {isLoading && (
+                  <span style={{
+                    fontSize: 12,
+                    color: 'rgba(255,255,255,0.6)',
+                    marginLeft: 8,
+                  }}>Mengirim...</span>
+                )}
+              </>
             </div>
             <p style={{
               fontSize: 11, color: 'rgba(255,255,255,0.18)',

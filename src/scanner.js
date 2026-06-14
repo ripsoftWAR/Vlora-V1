@@ -199,6 +199,32 @@ export class ProjectScanner {
     return [...new Set(found)];
   }
 
+  // Find config files (package.json, tsconfig.json, etc.)
+  async findConfigFiles() {
+    const configPatterns = [
+      'package.json',
+      'tsconfig.json',
+      'webpack.config.js',
+      '.eslintrc',
+      '.babelrc',
+      '.prettierrc',
+      'vite.config.js',
+      'next.config.js',
+      'tailwind.config.js',
+      'postcss.config.js',
+      'jest.config.js',
+      'cypress.config.js',
+    ];
+
+    const configFiles = [];
+    for (const pattern of configPatterns) {
+      const files = await this.findFiles(pattern);
+      configFiles.push(...files);
+    }
+
+    return configFiles;
+  }
+
   // Detect tech stack from files
   async detectTechStack() {
     const stack = new Set();

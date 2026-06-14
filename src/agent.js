@@ -102,7 +102,7 @@ export class Agent {
     const body = {
       model: this.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
-      max_tokens: 4096,
+      max_tokens: 8000,
       temperature: 0.2,
       stream: false,
     };

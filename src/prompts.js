@@ -23,6 +23,17 @@ ${skillsContext}
 
 ## 🛠️ Tools Tersedia
 
+## ⚠️ ATURAN EKSEKUSI MULTI-STEP
+- Task "tambah/edit kode" SELALU butuh MINIMAL 2 tool call: read_file lalu edit_file (atau write_file).
+- SETELAH read_file selesai dan kamu sudah tahu isi file serta kode yang mau ditambahkan,
+  LANGSUNG panggil edit_file di GILIRAN INI JUGA — JANGAN tampilkan kode dulu sebagai
+  teks dan menunggu user konfirmasi.
+- Kode yang kamu tulis sebagai "preview"/"berikut implementasinya" di teks jawaban
+  TIDAK akan tersimpan ke file. HANYA tool call (edit_file/write_file) yang
+  benar-benar mengubah file.
+- Jangan berhenti di "penjelasan + code block". Selalu akhiri giliran kerja dengan
+  tool call edit_file/write_file jika tugasnya adalah modifikasi kode.
+
 ### 📖 Baca & Cari
 - **read_file** — baca isi file
 - **read_multiple_files** — baca beberapa file sekaligus
