@@ -131,11 +131,16 @@ export class Agent {
         });
       }
 
+      // 4a-2. Sanitasi: buang 'tool' message yatim (tool_call_id-nya tidak
+      // punya pasangan assistant.tool_calls di window ini). Jaga-jaga
+      // kalau sliding window / compression memotong pasangan tool_calls/tool.
+      const sanitizedMessages = this._sanitizeToolPairs(windowMessages);
+
       // 4b. Call LLM
       const callStart = Date.now();
       let response;
       try {
-        response = await this._callAPI({ systemPrompt, messages: windowMessages, tools });
+        response = await this._callAPI({ systemPrompt, messages: sanitizedMessages, tools });
       } catch (err) {
         this.logger.logLLMCall({
           model: this.model,
@@ -421,6 +426,38 @@ export class Agent {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  SAFETY: pastikan pasangan tool_calls ↔ tool tidak pernah pecah
+  //  akibat sliding window / compression yang memotong di tengah blok.
+  // ═══════════════════════════════════════════════════════════════
+
+  _sanitizeToolPairs(messages) {
+    const result = [];
+    let pendingIds = null;
+
+    for (const msg of messages) {
+      if (msg.role === 'assistant' && msg.tool_calls?.length) {
+        pendingIds = new Set(msg.tool_calls.map((tc) => tc.id));
+        result.push(msg);
+        continue;
+      }
+
+      if (msg.role === 'tool') {
+        if (pendingIds && pendingIds.has(msg.tool_call_id)) {
+          result.push(msg);
+          pendingIds.delete(msg.tool_call_id);
+          if (pendingIds.size === 0) pendingIds = null;
+        }
+        continue;
+      }
+
+      pendingIds = null;
+      result.push(msg);
+    }
+
+    return result;
   }
 
   // ═══════════════════════════════════════════════════════════════
