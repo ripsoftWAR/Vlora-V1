@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { User, Bot, Copy, Check } from 'lucide-react';
@@ -33,7 +34,6 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
       const ta = document.createElement('textarea');
       ta.value = code;
       document.body.appendChild(ta);
@@ -47,20 +47,20 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
 
   return (
     <div className="relative group/code my-2">
-      {/* Lang badge + copy button */}
       <div className="flex items-center justify-between px-3 py-1.5
                     bg-white/[0.06] border border-white/[0.06] border-b-0
                     rounded-t-lg">
-        <span className="text-[10px] font-mono text-white/25 uppercase tracking-wider">
+        <span className="text-xs font-mono text-white/40 uppercase tracking-wider">
           {lang || 'code'}
         </span>
-        <button
+        <motion.button
           onClick={handleCopy}
           aria-label={copied ? 'Tersalin' : 'Salin kode'}
           className="flex items-center gap-1.5 px-2 py-0.5 rounded-md
-                     text-[11px] text-white/25 hover:text-white/50
-                     hover:bg-white/[0.06] transition-all duration-200
+                     text-xs text-white/40 hover:text-white/55
+                     hover:bg-white/[0.06] transition-colors duration-200
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50"
+          whileTap={{ scale: 0.92 }}
         >
           {copied ? (
             <>
@@ -69,13 +69,12 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
             </>
           ) : (
             <>
-              <Copy size={11} />
+              <Copy size={12} />
               <span>Salin</span>
             </>
           )}
-        </button>
+        </motion.button>
       </div>
-      {/* Code */}
       <pre className="!mt-0 !rounded-t-none !rounded-b-lg">
         <code className={className}>{children}</code>
       </pre>
@@ -83,26 +82,37 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   );
 }
 
+// ── Main Component ────────────────────────────────────────────
 export default function ChatMessage({ message }: Props) {
   const isUser = message.role === 'user';
 
   return (
-    <div
+    <motion.div
       role="article"
       aria-label={isUser ? 'Pesan pengguna' : 'Pesan asisten'}
+      layout
+      initial={{ opacity: 0, y: 16, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{
+        type: 'spring',
+        stiffness: 400,
+        damping: 30,
+        mass: 0.8,
+      }}
       className={`
         flex gap-3 items-start max-w-[780px] w-full
-        animate-in fade-in slide-in-from-bottom-1 duration-300
         ${isUser ? 'flex-row-reverse self-end' : 'self-start'}
       `}
     >
       {/* Avatar */}
-      <div
+      <motion.div
         role="img"
         aria-label={isUser ? 'Avatar pengguna' : 'Avatar asisten AI'}
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 25, delay: 0.08 }}
         className={`
           w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0
-          transition-all duration-300
           ${isUser
             ? 'bg-gradient-to-br from-indigo-500 to-blue-500 shadow-lg shadow-indigo-500/25'
             : 'bg-white/[0.06] border border-white/[0.08]'
@@ -114,7 +124,7 @@ export default function ChatMessage({ message }: Props) {
         ) : (
           <Bot size={14} className="text-indigo-300" aria-hidden="true" />
         )}
-      </div>
+      </motion.div>
 
       {/* Content */}
       <div className="max-w-[calc(100%-44px)] min-w-0">
@@ -126,11 +136,10 @@ export default function ChatMessage({ message }: Props) {
         {/* Bubble */}
         <div
           className={`
-            px-4 py-3 rounded-2xl text-[14.5px] leading-[1.75]
-            transition-all duration-300
+            relative px-4 py-3 rounded-2xl text-[14.5px] leading-[1.75]
             ${isUser
               ? 'bg-gradient-to-br from-indigo-500/50 to-blue-500/40 border border-indigo-400/30 text-white shadow-lg shadow-indigo-500/10 rounded-tr-md backdrop-blur-xl'
-              : 'bg-white/[0.04] border border-white/[0.07] text-slate-200 rounded-tl-md backdrop-blur-xl'
+              : 'bg-white/[0.04] border border-white/[0.07] text-slate-200 rounded-tl-md backdrop-blur-xl border-l-[3px] border-l-indigo-400/30'
             }
           `}
         >
@@ -164,10 +173,10 @@ export default function ChatMessage({ message }: Props) {
         </div>
 
         {/* Timestamp */}
-        <p className={`text-[10px] font-mono text-white/25 mt-1.5 ${isUser ? 'text-right' : 'text-left'}`}>
+        <p className={`text-xs font-mono text-white/40 mt-1.5 ${isUser ? 'text-right' : 'text-left'}`}>
           {message.timestamp}
         </p>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { Menu, Loader2 } from 'lucide-react';
 import ChatMessage from './components/ChatMessage';
@@ -171,15 +172,14 @@ export default function App() {
                   const msgs = [...p];
                   const last = msgs[msgs.length - 1];
                   if (last?.role === 'assistant') {
-                    const tcs = last.toolCalls || [];
-                    // Replace existing running entry for same tool, or add new
+                    const tcs = [...(last.toolCalls || [])];
                     const idx = tcs.findIndex(t => t.name === toolName && t.status === 'running');
                     if (idx >= 0) {
                       tcs[idx] = { ...tcs[idx], status: 'running' };
                     } else {
                       tcs.push({ name: toolName, status: 'running', preview: '' });
                     }
-                    last.toolCalls = [...tcs];
+                    msgs[msgs.length - 1] = { ...last, toolCalls: tcs };
                   }
                   return msgs;
                 });
@@ -199,7 +199,7 @@ export default function App() {
                         ? { ...t, status: 'done' as const, preview }
                         : t
                     );
-                    last.toolCalls = tcs;
+                    msgs[msgs.length - 1] = { ...last, toolCalls: tcs };
                   }
                   return msgs;
                 });
@@ -212,7 +212,8 @@ export default function App() {
                   const msgs = [...p];
                   const last = msgs[msgs.length - 1];
                   if (last?.role === 'assistant') {
-                    last.content += token;
+                    // Immutable update — cegah double-append di React Strict Mode
+                    msgs[msgs.length - 1] = { ...last, content: last.content + token };
                   }
                   return msgs;
                 });
@@ -228,7 +229,7 @@ export default function App() {
                   const msgs = [...p];
                   const last = msgs[msgs.length - 1];
                   if (last?.role === 'assistant' && !last.content) {
-                    last.content = `⚠️ Error: ${payload.message}`;
+                    msgs[msgs.length - 1] = { ...last, content: `⚠️ Error: ${payload.message}` };
                   }
                   return msgs;
                 });
@@ -331,25 +332,42 @@ export default function App() {
               ))
             )}
 
-            {/* Typing indicator */}
-            {loading && (
-              <div className="flex gap-3 items-start animate-in fade-in duration-200">
-                <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08]
-                              flex items-center justify-center flex-shrink-0">
-                  <Loader2 size={14} className="text-indigo-300 animate-spin" />
-                </div>
-                <div className="flex gap-1.5 px-4 py-3 rounded-2xl rounded-tl-md
-                              bg-white/[0.04] border border-white/[0.07] backdrop-blur-xl">
-                  {[0, 150, 300].map((d) => (
-                    <span
-                      key={d}
-                      className="w-1.5 h-1.5 rounded-full bg-indigo-300/50"
-                      style={{ animation: `dots 1.2s ease-in-out ${d}ms infinite` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Typing indicator with context */}
+            <AnimatePresence>
+              {loading && (
+                <motion.div
+                  className="flex gap-3 items-start"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08]
+                                flex items-center justify-center flex-shrink-0">
+                    <Loader2 size={14} className="text-indigo-300 animate-spin" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {/* Context label */}
+                    <span className="text-[11.5px] text-indigo-300/60 font-medium tracking-wide">
+                      {activeTool
+                        ? TOOL_META[activeTool]?.label || 'Memproses...'
+                        : 'Agent sedang berpikir...'}
+                    </span>
+                    {/* Dots */}
+                    <div className="flex gap-1.5 px-4 py-2.5 rounded-2xl rounded-tl-md
+                                  bg-white/[0.04] border border-white/[0.07] backdrop-blur-xl">
+                      {[0, 150, 300].map((d) => (
+                        <span
+                          key={d}
+                          className="w-1.5 h-1.5 rounded-full bg-indigo-300/50"
+                          style={{ animation: `dots 1.2s ease-in-out ${d}ms infinite` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div ref={bottomRef} />
           </div>

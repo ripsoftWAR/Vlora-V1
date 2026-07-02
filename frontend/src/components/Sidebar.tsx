@@ -65,7 +65,7 @@ export default function Sidebar({ open, onClose, project, selectedPath, onFolder
               </h2>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" aria-hidden="true" />
-                <span className="text-[10px] font-mono text-white/25">llama-3.3-70b</span>
+                <span className="text-xs font-mono text-white/40">llama-3.3-70b</span>
               </div>
             </div>
             {/* Close (mobile) */}
@@ -110,14 +110,14 @@ export default function Sidebar({ open, onClose, project, selectedPath, onFolder
 
             {selectedPath && (
               <div className="flex items-center gap-2 mx-3 mt-2 px-2.5 py-1.5
-                            rounded-lg bg-white/[0.03] text-[11px] text-white/50">
+                            rounded-lg bg-white/[0.03] text-xs text-white/55">
                 <span aria-hidden="true">📁</span>
                 <span className="truncate font-mono">{selectedPath}</span>
               </div>
             )}
 
             {project.totalFiles > 0 && (
-              <p className="px-4 mt-1.5 text-[11px] text-white/25">
+              <p className="px-4 mt-1.5 text-xs text-white/40">
                 {project.totalFiles} file terdeteksi
               </p>
             )}
@@ -134,7 +134,7 @@ export default function Sidebar({ open, onClose, project, selectedPath, onFolder
               {techStack.map((t) => (
                 <span
                   key={t}
-                  className="px-2 py-0.5 rounded-md text-[10.5px] font-medium
+                  className="px-2 py-0.5 rounded-md text-xs font-medium
                            bg-white/[0.04] border border-white/[0.06] text-white/45"
                 >
                   {t}
@@ -151,7 +151,7 @@ export default function Sidebar({ open, onClose, project, selectedPath, onFolder
                   <div
                     key={s}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-lg
-                             text-[11.5px] text-white/40"
+                             text-xs text-white/40"
                   >
                     <Layers size={12} className="text-indigo-400/60" aria-hidden="true" />
                     <span>{s}</span>
@@ -187,7 +187,7 @@ export default function Sidebar({ open, onClose, project, selectedPath, onFolder
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="py-1.5">
-      <h3 className="px-4 py-1.5 text-[10px] font-semibold text-white/25
+      <h3 className="px-4 py-1.5 text-xs font-semibold text-white/40
                      tracking-[0.1em] uppercase">
         {title}
       </h3>
@@ -232,7 +232,7 @@ function FileTree({ nodes, depth = 0 }: { nodes: FileNode[]; depth?: number }) {
             }}
             className={`
               flex items-center gap-1.5 py-[3px] rounded-md
-              text-[11.5px] cursor-pointer select-none
+              text-xs cursor-pointer select-none
               transition-colors duration-100
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 focus-visible:ring-inset
               ${n.type === 'dir' ? 'text-white/60 hover:text-white/85' : 'text-white/35 hover:text-white/55'}
@@ -243,12 +243,12 @@ function FileTree({ nodes, depth = 0 }: { nodes: FileNode[]; depth?: number }) {
               <ChevronRight
                 size={11}
                 aria-hidden="true"
-                className={`text-white/25 transition-transform ${open[n.name] ? 'rotate-90' : ''}`}
+                className={`text-white/40 transition-transform ${open[n.name] ? 'rotate-90' : ''}`}
               />
             ) : (
               <span className="w-[11px] text-center text-white/15" aria-hidden="true">·</span>
             )}
-            <span className={n.type === 'file' ? 'font-mono text-[10.5px]' : 'font-medium'}>
+            <span className={n.type === 'file' ? 'font-mono text-xs' : 'font-medium'}>
               {n.name}
             </span>
           </div>

@@ -93,7 +93,7 @@ export default function RealtimeBadge({ toolName }: Props) {
 
       {/* Label */}
       <div className="flex flex-col">
-        <span className="text-[11px] font-semibold text-white/45 tracking-widest uppercase">
+        <span className="text-xs font-semibold text-white/55 tracking-widest uppercase">
           Agent Action
         </span>
         <span
