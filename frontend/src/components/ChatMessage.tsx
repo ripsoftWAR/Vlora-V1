@@ -126,7 +126,7 @@ export default function ChatMessage({ message }: Props) {
         {/* Bubble */}
         <div
           className={`
-            px-4 py-2.5 rounded-2xl text-[14px] leading-7
+            px-4 py-3 rounded-2xl text-[14.5px] leading-[1.75]
             transition-all duration-300
             ${isUser
               ? 'bg-gradient-to-br from-indigo-500/50 to-blue-500/40 border border-indigo-400/30 text-white shadow-lg shadow-indigo-500/10 rounded-tr-md backdrop-blur-xl'

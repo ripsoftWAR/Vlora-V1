@@ -120,10 +120,44 @@ export class Agent {
     return finalText;
   }
 
+  /**
+   * Sanitasi messages — hapus orphan tool messages yang tidak punya
+   * pasangan assistant dengan tool_calls sebelumnya. Ini safety net
+   * kalau _summarizeMemory masih lobolos.
+   */
+  _sanitizeMessages(messages) {
+    const cleaned = [];
+    // Track tool_call_ids yang "aktif" dari assistant terakhir dengan tool_calls
+    let activeToolCallIds = new Set();
+
+    for (const msg of messages) {
+      if (msg.role === 'assistant' && msg.tool_calls) {
+        // Reset: assistant baru dengan tool_calls menggantikan yang lama
+        activeToolCallIds = new Set(msg.tool_calls.map(tc => tc.id));
+        cleaned.push(msg);
+      } else if (msg.role === 'tool') {
+        // Hanya izinkan tool message jika tool_call_id-nya dikenal
+        if (activeToolCallIds.has(msg.tool_call_id)) {
+          cleaned.push(msg);
+        }
+        // Kalau orphan, skip (tidak di-push)
+      } else {
+        // user, assistant (tanpa tool_calls), system — selalu aman
+        activeToolCallIds.clear();
+        cleaned.push(msg);
+      }
+    }
+
+    return cleaned;
+  }
+
   async callAPI({ systemPrompt, messages, tools }) {
+    // Sanitasi sebelum kirim ke API
+    const cleanMessages = this._sanitizeMessages(messages);
+
     const body = {
       model: this.model,
-      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      messages: [{ role: 'system', content: systemPrompt }, ...cleanMessages],
       max_tokens: 8000,
       temperature: 0.2,
       stream: false,
@@ -169,9 +203,56 @@ export class Agent {
     }
   }
 
+  /**
+   * Cari batas aman untuk memotong history — tidak boleh memotong
+   * di tengah grup assistant(tool_calls) → tool → tool → ...
+   * Batas aman = mulai dari index message dengan role 'user' atau
+   * 'assistant' (tanpa tool_calls) atau 'system'.
+   */
+  _findSafeCutIndex(maxKeep) {
+    const total = this.conversationHistory.length;
+    const startIdx = Math.max(0, total - maxKeep);
+
+    // Geser mundur sampai ketemu role yang "aman" sebagai awal
+    for (let i = startIdx; i < total; i++) {
+      const role = this.conversationHistory[i].role;
+      // Tool messages selalu harus didahului assistant dengan tool_calls
+      if (role === 'tool') continue;
+      // Kalau ini assistant dengan tool_calls, cek apakah tool_call_id di
+      // message tool setelahnya valid (masih dalam array)
+      if (role === 'assistant' && this.conversationHistory[i].tool_calls) {
+        // Pastikan semua tool response setelahnya masih ada
+        const toolCallIds = this.conversationHistory[i].tool_calls.map(tc => tc.id);
+        let allToolsPresent = true;
+        for (let j = i + 1; j < total; j++) {
+          const msg = this.conversationHistory[j];
+          if (msg.role === 'tool' && toolCallIds.includes(msg.tool_call_id)) {
+            continue; // masih dalam grup yang sama
+          }
+          if (msg.role === 'assistant' && !msg.tool_calls) {
+            break; // assistant final — batas aman
+          }
+          if (msg.role === 'user') break;
+          if (msg.role === 'assistant' && msg.tool_calls) {
+            // Mulai grup tool_calls baru — berarti semua tool sebelumnya sudah lengkap
+            break;
+          }
+        }
+        if (!allToolsPresent) continue; // tool belum lengkap, cari index berikutnya
+      }
+      // Role 'user', 'assistant' (tanpa tool_calls), atau 'system' — aman
+      return i;
+    }
+
+    // Fallback: return total (tidak ada batas aman, keep semua)
+    return total;
+  }
+
   async _summarizeMemory(systemPrompt) {
-    const toSummarize = this.conversationHistory.slice(0, -10);
-    const recent      = this.conversationHistory.slice(-10);
+    const safeCutIdx = this._findSafeCutIndex(10);
+    const toSummarize = this.conversationHistory.slice(0, safeCutIdx);
+    const recent      = this.conversationHistory.slice(safeCutIdx);
+
     if (!toSummarize.length) return;
 
     try {
