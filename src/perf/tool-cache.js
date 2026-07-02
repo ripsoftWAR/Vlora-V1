@@ -30,12 +30,27 @@ export class ToolCache {
   }
 
   /**
+   * Deep-sort object keys untuk JSON.stringify yang deterministik.
+   * Replacer bekerja bottom-up: nested object sudah tersortir saat parent diproses.
+   */
+  _stableStringify(obj) {
+    return JSON.stringify(obj, (_key, value) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return Object.keys(value).sort().reduce((acc, k) => {
+          acc[k] = value[k];
+          return acc;
+        }, {});
+      }
+      return value;
+    });
+  }
+
+  /**
    * Generate cache key from tool name + args
    */
   _key(toolName, args) {
-    // Sort keys for deterministic hashing
-    const sorted = typeof args === 'object' ? 
-      JSON.stringify(args, Object.keys(args || {}).sort()) : 
+    const sorted = typeof args === 'object' ?
+      this._stableStringify(args) :
       JSON.stringify(args);
     const hash = crypto.createHash('md5').update(`${toolName}:${sorted}`).digest('hex').slice(0, 12);
     return `${toolName}:${hash}`;
@@ -94,16 +109,18 @@ export class ToolCache {
    * Invalidate cache entries related to a file path (for write operations)
    */
   invalidateFile(filePath) {
-    let count = 0;
+    const toDelete = new Set();
     for (const [key, entry] of this.cache) {
       if (entry.result.includes(filePath)) {
-        this.cache.delete(key);
-        this.accessOrder = this.accessOrder.filter(k => k !== key);
-        count++;
+        toDelete.add(key);
       }
     }
-    this.stats.writes += count;
-    return count;
+    for (const key of toDelete) {
+      this.cache.delete(key);
+    }
+    this.accessOrder = this.accessOrder.filter(k => !toDelete.has(k));
+    this.stats.writes += toDelete.size;
+    return toDelete.size;
   }
 
   /**
@@ -124,7 +141,7 @@ export class ToolCache {
     
     const preview = str.slice(0, this.truncateAt);
     const remaining = str.length - this.truncateAt;
-    this.stats.totalSavedTokens += Math.ceil((remaining) / 4); // rough token estimate
+    this.stats.totalSavedTokens += Math.ceil(remaining / 3.5); // ~3.5 char/token untuk JSON/code
     
     return `${preview}\n\n...[TRUNCATED: ${remaining.toLocaleString()} more chars. Use read_file with specific params to re-read if needed.]`;
   }
