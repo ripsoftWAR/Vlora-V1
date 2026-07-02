@@ -12,6 +12,5 @@ export const chalk = {
   bold:    Object.assign(c('1'), {
     white: (t) => `\x1b[1;37m${t}\x1b[0m`,
     green: (t) => `\x1b[1;32m${t}\x1b[0m`,
-    white: (t) => `\x1b[1;37m${t}\x1b[0m`,
   }),
 };

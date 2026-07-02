@@ -40,6 +40,23 @@ export class Agent {
   }
 
   async chat(userMessage, onChunk) {
+    return this.chatStream(userMessage, {
+      onToolStart: (name) => { if (onChunk) onChunk(chalk.dim(`\n[🔧 ${name}]\n`)); },
+      onToolEnd: (name, preview) => { if (onChunk) onChunk(chalk.dim(`   → ${preview}\n`)); },
+      onToken: (token) => { if (onChunk) onChunk(token); },
+      onDone: () => {},
+      onError: (err) => { throw err; },
+    });
+  }
+
+  /**
+   * Streaming chat with structured callbacks for realtime UI
+   * @param {string} userMessage
+   * @param {{ onToolStart, onToolEnd, onToken, onDone, onError }} callbacks
+   */
+  async chatStream(userMessage, callbacks = {}) {
+    const { onToolStart, onToolEnd, onToken, onDone, onError } = callbacks;
+
     this.conversationHistory.push({ role: 'user', content: userMessage });
     await this.memory.addMessage(this.projectPath, { role: 'user', content: userMessage });
 
@@ -64,11 +81,14 @@ export class Agent {
           let args = {};
           try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /**/ }
 
-          onChunk(chalk.dim(`\n[🔧 ${name}]\n`));
+          // Emit tool start event
+          if (onToolStart) onToolStart(name, args);
 
           const result  = await this.executeTool(name, args, tools);
           const preview = (typeof result === 'string' ? result : JSON.stringify(result)).slice(0, 150);
-          onChunk(chalk.dim(`   → ${preview}\n`));
+
+          // Emit tool end event
+          if (onToolEnd) onToolEnd(name, preview);
 
           this.conversationHistory.push({
             role: 'tool',
@@ -83,7 +103,8 @@ export class Agent {
         // Streaming simulation word-by-word
         const words = finalText.split(' ');
         for (let i = 0; i < words.length; i++) {
-          onChunk(words[i] + (i < words.length - 1 ? ' ' : ''));
+          const token = words[i] + (i < words.length - 1 ? ' ' : '');
+          if (onToken) onToken(token);
           await sleep(6);
         }
 
@@ -95,6 +116,7 @@ export class Agent {
       }
     }
 
+    if (onDone) onDone(finalText);
     return finalText;
   }
 

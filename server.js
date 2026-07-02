@@ -50,7 +50,52 @@ console.log(`🤖 Agent siap! Provider: ${provider.toUpperCase()}`);
 
 // ── Routes ─────────────────────────────────────────────────────
 
-// Chat / analyze
+// Chat / analyze (SSE streaming — realtime)
+app.post('/api/analyze/stream', async (req, res) => {
+  const { query } = req.body;
+  if (!query) return res.status(400).json({ error: 'Query kosong' });
+
+  console.log(`📩 [SSE] Query: ${query.slice(0, 80)}`);
+
+  // SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    await agent.chatStream(query, {
+      onToolStart: (name, args) => {
+        send('tool_start', { name, args });
+      },
+      onToolEnd: (name, preview) => {
+        send('tool_end', { name, preview });
+      },
+      onToken: (token) => {
+        send('token', { text: token });
+      },
+      onDone: (fullText) => {
+        send('done', { text: fullText });
+      },
+      onError: (err) => {
+        send('error', { message: err.message });
+      },
+    });
+  } catch (err) {
+    console.error('❌ Agent SSE error:', err.message);
+    send('error', { message: err.message });
+  } finally {
+    res.end();
+  }
+});
+
+// Chat / analyze (non-streaming — fallback)
 app.post('/api/analyze', async (req, res) => {
   const { query } = req.body;
   if (!query) return res.status(400).json({ error: 'Query kosong' });
@@ -59,10 +104,21 @@ app.post('/api/analyze', async (req, res) => {
 
   try {
     let fullText = '';
-    await agent.chat(query, (chunk) => { fullText += chunk; });
+    const toolCalls = [];
+    await agent.chatStream(query, {
+      onToolStart: (name, args) => { toolCalls.push({ name, status: 'running', preview: '' }); },
+      onToolEnd: (name, preview) => {
+        const tc = toolCalls.find(t => t.name === name && t.status === 'running');
+        if (tc) { tc.status = 'done'; tc.preview = preview; }
+      },
+      onToken: (token) => { fullText += token; },
+      onDone: () => {},
+      onError: (err) => { throw err; },
+    });
 
     res.json({
       text: fullText,
+      toolCalls,
       data: {
         labels: ['Relevansi', 'Kompleksitas', 'Kualitas', 'Performa'],
         values: [
@@ -84,12 +140,14 @@ app.get('/api/project', async (req, res) => {
   try {
     const info   = await scanner.quickScan();
     const skills = await skillManager.listInstalled();
+    const tree   = await scanner.getTree(4);
     res.json({
       projectPath,
       provider,
       totalFiles: info.totalFiles,
       techStack:  info.techStack,
       skills,
+      tree,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -155,10 +213,6 @@ app.get('/api/health', (_, res) => {
   res.json({ ok: true, provider, projectPath });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Backend Agent JALAN di http://localhost:${PORT}`);
-});
-
 // Upload folder
 import multer from 'multer';
 
@@ -187,4 +241,8 @@ app.post('/api/upload-folder', upload.array('files'), async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Backend Agent JALAN di http://localhost:${PORT}`);
 });

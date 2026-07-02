@@ -6,8 +6,13 @@ try {
   const envPath = path.join(path.dirname(fileURLToPath(import.meta.url)), ".env");
   const lines = readFileSync(envPath, "utf-8").split("\n");
   for (const line of lines) {
-    const [k, ...v] = line.split("=");
-    if (k && v.length) process.env[k.trim()] = v.join("=").trim();
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim();
+    if (key) process.env[key] = val;
   }
 } catch {}
 
@@ -18,8 +23,6 @@ import { ProjectScanner } from './src/scanner.js';
 import { SkillManager } from './src/skills.js';
 import { chalk } from './src/colors.js';
 import readline from 'readline';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -60,7 +63,7 @@ async function main() {
   console.log(chalk.green(`✅ Ditemukan: ${projectInfo.totalFiles} file, tech stack: ${projectInfo.techStack.join(', ') || 'unknown'}`));
 
   // Show installed skills
-  const installedSkills = await skillManager.listInstalled();
+  const installedSkills = await skillManager.listInstalledNames();
   if (installedSkills.length > 0) {
     console.log(chalk.blue(`📦 Skills aktif: ${installedSkills.join(', ')}`));
   }
@@ -103,7 +106,7 @@ ${chalk.cyan('Skill commands:')}
 ${chalk.gray('Contoh: /skill add rag-blueprint')}
 `);
       } else if (sub === 'list') {
-        const list = await skillManager.listInstalled();
+        const list = await skillManager.listInstalledNames();
         if (list.length === 0) {
           console.log(chalk.yellow('📦 Belum ada skill terinstall. Coba: /skill add rag-blueprint'));
         } else {
@@ -113,10 +116,11 @@ ${chalk.gray('Contoh: /skill add rag-blueprint')}
         }
       } else if (sub === 'available') {
         const available = skillManager.listAvailable();
+        const installed = await skillManager.listInstalledNames();
         console.log(chalk.blue('\n📋 NVIDIA Skills yang tersedia:'));
         available.forEach((s) => {
-          const installed = installedSkills.includes(s);
-          console.log(`  ${installed ? chalk.green('✓') : chalk.gray('○')} ${s}${installed ? chalk.gray(' (installed)') : ''}`);
+          const isInstalled = installed.includes(s);
+          console.log(`  ${isInstalled ? chalk.green('✓') : chalk.gray('○')} ${s}${isInstalled ? chalk.gray(' (installed)') : ''}`);
         });
         console.log(chalk.gray('\nInstall dengan: /skill add <nama>\n'));
       } else if (sub === 'add') {

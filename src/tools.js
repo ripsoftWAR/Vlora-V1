@@ -87,7 +87,7 @@ export function buildTools(scanner) {
         if (count === 1) {
           const updated = normalOrig.replace(normalOld, normalNew);
           await fs.writeFile(fullPath, updated, 'utf-8');
-          scanner._cache?.delete(fullPath);
+          scanner._cache.delete(fullPath);
           return `✅ Edit berhasil di "${file_path}"`;
         }
         // Fallback trim
@@ -97,15 +97,12 @@ export function buildTools(scanner) {
         if (count === 1) {
           const updated = trimOrig.replace(trimOld, normalNew);
           await fs.writeFile(fullPath, updated, 'utf-8');
-          scanner._cache?.delete(fullPath);
+          scanner._cache.delete(fullPath);
           return `✅ Edit berhasil di "${file_path}" (trim-match)`;
         }
         if (count === 0) return `❌ Teks tidak ditemukan di "${file_path}". Pastikan exact match.`;
         if (count > 1) return `❌ Teks ditemukan ${count}x — terlalu ambigu.`;
-        const updated = original.replace(old_str, new_str);
-        await fs.writeFile(fullPath, updated, 'utf-8');
-        scanner._cache.delete(fullPath);
-        return `✅ Edit berhasil di "${file_path}" — ${old_str.length} chars → ${new_str.length} chars`;
+        return `❌ Gagal mengedit "${file_path}" — teks tidak cocok setelah normalisasi.`;
       },
     },
 

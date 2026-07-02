@@ -2,13 +2,21 @@ import fs from 'fs/promises';
 import path from 'path';
 import { existsSync, statSync } from 'fs';
 
-// Files/dirs to always ignore
+// Files/dirs to always ignore (exact name match)
 const IGNORE = new Set([
   'node_modules', '.git', '.next', '.nuxt', 'dist', 'build', '.cache',
   'coverage', '__pycache__', '.venv', 'venv', 'env', '.env',
-  '.DS_Store', 'Thumbs.db', '.idea', '.vscode', '*.min.js', '*.map',
+  '.DS_Store', 'Thumbs.db', '.idea', '.vscode',
   'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
 ]);
+
+// File patterns to ignore (glob-style, checked with endsWith)
+const IGNORE_PATTERNS = ['.min.js', '.map'];
+
+function shouldIgnore(name) {
+  if (IGNORE.has(name)) return true;
+  return IGNORE_PATTERNS.some((p) => name.endsWith(p));
+}
 
 const CODE_EXTS = new Set([
   '.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte', '.py', '.go',
@@ -67,7 +75,7 @@ export class ProjectScanner {
     }
 
     const filtered = entries
-      .filter((e) => !IGNORE.has(e.name) && !e.name.startsWith('.'))
+      .filter((e) => !shouldIgnore(e.name) && !e.name.startsWith('.'))
       .sort((a, b) => {
         if (a.isDirectory() && !b.isDirectory()) return -1;
         if (!a.isDirectory() && b.isDirectory()) return 1;
@@ -320,7 +328,7 @@ export class ProjectScanner {
       return [];
     }
     return entries
-      .filter((e) => !IGNORE.has(e.name) && !e.name.startsWith('.'))
+      .filter((e) => !shouldIgnore(e.name) && !e.name.startsWith('.'))
       .map((e) => ({ name: e.name, isDir: e.isDirectory() }));
   }
 
@@ -339,7 +347,7 @@ export class ProjectScanner {
     }
 
     for (const entry of entries) {
-      if (IGNORE.has(entry.name) || entry.name.startsWith('.')) continue;
+      if (shouldIgnore(entry.name) || entry.name.startsWith('.')) continue;
       const fullPath = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
         await this._walkFiles(fullPath, callback);
