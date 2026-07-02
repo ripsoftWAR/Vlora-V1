@@ -41,12 +41,7 @@ const TOOL_CONFIG: Record<string, { icon: string; label: string; color: string }
   find_ui_components: { icon: '🎨', label: 'Cari komponen UI', color: '#f472b6' },
 };
 
-const SUGGESTED = [
-  'Jelaskan arsitektur project ini',
-  'Review kode agent.js',
-  'Cari potensi bug di project ini',
-  'Bagaimana cara menambah tool baru?',
-];
+
 
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -59,11 +54,13 @@ function ToolCallCard({ tool }: { tool: ToolCall }) {
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
-      padding: '4px 10px 4px 7px',
-      background: isDone ? `${config.color}10` : 'rgba(255,255,255,0.04)',
-      border: `1px solid ${isDone ? config.color + '30' : 'rgba(255,255,255,0.08)'}`,
-      borderRadius: 8,
-      transition: 'all 0.3s',
+      padding: '6px 12px 6px 8px',
+      background: isDone ? `${config.color}15` : 'rgba(30,33,50,0.6)',
+      border: `1px solid ${isDone ? config.color + '40' : 'rgba(255,255,255,0.1)'}`,
+      borderRadius: 9,
+      transition: 'all 0.3s ease',
+      backdropFilter: 'blur(8px)',
+      boxShadow: isDone ? `0 0 8px ${config.color}20` : 'none',
     }}>
       {/* Status indicator */}
       <span style={{ fontSize: 13, lineHeight: 1 }}>
@@ -121,9 +118,10 @@ function ToolCallGroup({ toolCalls }: { toolCalls: ToolCall[] }) {
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
-        fontSize: 10.5, color: 'rgba(255,255,255,0.25)',
+        fontSize: 11, color: 'rgba(255,215,0,0.6)',
         fontFamily: "'JetBrains Mono', monospace",
         letterSpacing: '0.05em',
+        textTransform: 'uppercase',
       }}>
         <span style={{
           width: 1, height: 12,
@@ -162,8 +160,11 @@ function StatusDot({ status }: { status: AgentStatus }) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 7,
       fontSize: 12, color,
-      background: `${color}18`, border: `1px solid ${color}30`,
-      borderRadius: 99, padding: '3px 10px 3px 7px',
+      background: `${color}20`, border: `1px solid ${color}40`,
+      borderRadius: 99, padding: '4px 12px 4px 8px',
+      backdropFilter: 'blur(8px)',
+      boxShadow: `0 0 10px ${color}30`,
+      transition: 'all 0.3s ease',
     }}>
       <span style={{
         width: 6, height: 6, borderRadius: '50%', background: color,
@@ -223,6 +224,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [project, setProject] = useState<ProjectInfo>({ totalFiles: 0, techStack: [], skills: [], files: FALLBACK_FILES });
   const [selectedPath, setSelectedPath] = useState('');
@@ -273,6 +275,7 @@ export default function App() {
     setStatus('coding');
 
     try {
+      setIsLoading(true);
       const res = await axios.post(`${API_URL}/api/analyze`, { query });
       const { text: reply, toolCalls } = res.data;
       // Parse tool calls dengan preview dari nama file
@@ -289,6 +292,7 @@ export default function App() {
     } finally {
       setStatus('idle');
       setLoading(false);
+      setIsLoading(false);
       textareaRef.current?.focus();
     }
   };
@@ -311,50 +315,51 @@ export default function App() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { height: 100%; }
-        body { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; background: #0a0e1a; color: #e2e8f0; -webkit-font-smoothing: antialiased; font-feature-settings: 'cv02','cv03','cv04','cv11'; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: #0f111a; color: #e2e8f0; -webkit-font-smoothing: antialiased; font-feature-settings: 'cv02','cv03','cv04','cv11'; }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
         @keyframes dots { 0%,80%,100%{opacity:0.2;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }
         @keyframes fadeSlideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes toolIn { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:translateX(0)} }
-        textarea { font-family: 'Plus Jakarta Sans', sans-serif; }
-        ::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
-        .glass { background: rgba(255,255,255,0.04); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
-        .glass-strong { background: rgba(255,255,255,0.07); backdrop-filter: blur(32px); border: 1px solid rgba(255,255,255,0.12); }
-        .msg-appear { animation: fadeSlideIn 0.22s ease both; }
-        .tool-appear { animation: toolIn 0.18s ease both; }
-        .suggest-btn:hover { background: rgba(255,255,255,0.07) !important; border-color: rgba(255,255,255,0.15) !important; transform: translateY(-1px); }
-        .sidebar-overlay { display: none; position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+        @keyframes glow { 0%,100%{box-shadow:0 0 6px rgba(255,215,0,0.3)} 50%{box-shadow:0 0 12px rgba(255,215,0,0.5)} }
+        textarea { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: rgba(255,215,0,0.3); border-radius: 99px; }
+        .glass { background: rgba(30,33,50,0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); }
+        .glass-strong { background: rgba(30,33,50,0.8); backdrop-filter: blur(32px); border: 1px solid rgba(255,255,255,0.15); }
+        .msg-appear { animation: fadeSlideIn 0.3s ease both; }
+        .tool-appear { animation: toolIn 0.2s ease both; }
+        .suggest-btn:hover { background: rgba(255,215,0,0.1) !important; border-color: rgba(255,215,0,0.3) !important; transform: translateY(-1px); }
+        .sidebar-overlay { display: none; position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); }
         @media (max-width: 768px) {
           .sidebar-overlay.open { display: block; }
-          .sidebar { position: fixed !important; left: 0 !important; top: 0 !important; bottom: 0 !important; z-index: 50; transform: translateX(-100%); transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); }
+          .sidebar { position: fixed !important; left: 0 !important; top: 0 !important; bottom: 0 !important; z-index: 50; transform: translateX(-100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); }
           .sidebar.open { transform: translateX(0); }
           .mobile-topbar { display: flex !important; }
         }
         @media (min-width: 769px) { .sidebar { transform: none !important; } .mobile-topbar { display: none !important; } }
-        .md p { margin-bottom: 10px; line-height: 1.8; font-size: 14px; }
-        .md h1,.md h2,.md h3 { font-weight: 600; margin: 16px 0 7px; color: #f1f5f9; }
+        .md p { margin-bottom: 12px; line-height: 1.8; font-size: 14px; }
+        .md h1,.md h2,.md h3 { font-weight: 600; margin: 18px 0 8px; color: #f1f5f9; }
         .md h3{font-size:14px}.md h2{font-size:15px}.md h1{font-size:16px}
-        .md ul,.md ol { padding-left: 18px; margin-bottom: 10px; }
-        .md li { margin-bottom: 5px; font-size: 14px; line-height: 1.75; }
-        .md code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1); color: #a5f3c7; padding: 1px 6px; border-radius: 5px; }
-        .md pre { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin-bottom: 12px; }
+        .md ul,.md ol { padding-left: 20px; margin-bottom: 12px; }
+        .md li { margin-bottom: 6px; font-size: 14px; line-height: 1.75; }
+        .md code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.2); color: #ffd700; padding: 1px 6px; border-radius: 5px; }
+        .md pre { background: rgba(15,17,26,0.8); border: 1px solid rgba(255,215,0,0.2); border-radius: 10px; padding: 16px; overflow-x: auto; margin-bottom: 14px; }
         .md pre code { background: none; border: none; padding: 0; font-size: 12.5px; color: #e2e8f0; }
-        .md table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
-        .md th { background: rgba(255,255,255,0.06); padding: 7px 12px; border: 1px solid rgba(255,255,255,0.08); font-weight: 600; color: #f1f5f9; }
-        .md td { padding: 7px 12px; border: 1px solid rgba(255,255,255,0.06); color: #cbd5e1; }
-        .md strong { font-weight: 600; color: #f1f5f9; }
-        .md blockquote { border-left: 2px solid rgba(99,102,241,0.6); padding-left: 14px; color: #94a3b8; margin-bottom: 10px; }
+        .md table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13px; }
+        .md th { background: rgba(255,215,0,0.1); padding: 8px 12px; border: 1px solid rgba(255,215,0,0.2); font-weight: 600; color: #f1f5f9; }
+        .md td { padding: 8px 12px; border: 1px solid rgba(255,215,0,0.1); color: #cbd5e1; }
+        .md strong { font-weight: 600; color: #ffd700; }
+        .md blockquote { border-left: 2px solid rgba(255,215,0,0.6); padding-left: 16px; color: #94a3b8; margin-bottom: 12px; }
         .md a { color: #60a5fa; text-decoration: underline; }
       `}</style>
 
       {/* Ambient orbs */}
       <div style={{ position: 'fixed', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: '-20%', left: '-10%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)', filter: 'blur(40px)' }} />
-        <div style={{ position: 'absolute', bottom: '-20%', right: '-10%', width: 700, height: 700, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)', filter: 'blur(40px)' }} />
-        <div style={{ position: 'absolute', top: '40%', left: '40%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+        <div style={{ position: 'absolute', top: '-20%', left: '-10%', width: 600, height: 600, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,215,0,0.1) 0%, transparent 70%)', filter: 'blur(50px)' }} />
+        <div style={{ position: 'absolute', bottom: '-20%', right: '-10%', width: 700, height: 700, borderRadius: '50%', background: 'radial-gradient(circle, rgba(30,33,50,0.8) 0%, transparent 70%)', filter: 'blur(50px)' }} />
+        <div style={{ position: 'absolute', top: '40%', left: '40%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,215,0,0.05) 0%, transparent 70%)', filter: 'blur(70px)' }} />
       </div>
 
       <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
@@ -362,10 +367,10 @@ export default function App() {
       <div style={{ display: 'flex', height: '100vh', position: 'relative', zIndex: 1 }}>
 
         {/* ── Sidebar ── */}
-        <aside className={`glass-strong sidebar${sidebarOpen ? ' open' : ''}`} style={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+        <aside className={`glass-strong sidebar${sidebarOpen ? ' open' : ''}`} style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid rgba(255,215,0,0.1)', boxShadow: '4px 0 20px rgba(0,0,0,0.3)' }}>
           <div style={{ padding: '20px 18px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg, #6366f1, #3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 15, fontWeight: 700, boxShadow: '0 0 16px rgba(99,102,241,0.4)' }}>A</div>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg, #10b981, #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 15, fontWeight: 700, boxShadow: '0 0 16px rgba(99,102,241,0.4)' }}>A</div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#f1f5f9', letterSpacing: -0.3 }}>Analyst Agent</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
@@ -460,9 +465,9 @@ export default function App() {
                   <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.4)', lineHeight: 1.7 }}>Agent akan membaca kode, memori, dan skills aktif untuk menjawab pertanyaanmu.</p>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8, width: '100%' }}>
-                  {SUGGESTED.map(s => (
-                    <button key={s} className="suggest-btn" onClick={() => handleSend(s)} style={{ padding: '11px 14px', textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 11, fontSize: 12.5, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', lineHeight: 1.5, transition: 'all 0.2s', fontFamily: 'inherit' }}>{s}</button>
-                  ))}
+                  <button className="suggest-btn" onClick={() => handleSend("Tambahkan dark mode toggle")} style={{ padding: '11px 14px', textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 11, fontSize: 12.5, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', lineHeight: 1.5, transition: 'all 0.2s', fontFamily: 'inherit' }}>Tambahkan dark mode toggle</button>
+                  <button className="suggest-btn" onClick={() => handleSend("Refactor komponen FileTree")} style={{ padding: '11px 14px', textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 11, fontSize: 12.5, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', lineHeight: 1.5, transition: 'all 0.2s', fontFamily: 'inherit' }}>Refactor komponen FileTree</button>
+                  <button className="suggest-btn" onClick={() => handleSend("Cari unused imports di project ini")} style={{ padding: '11px 14px', textAlign: 'left', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 11, fontSize: 12.5, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', lineHeight: 1.5, transition: 'all 0.2s', fontFamily: 'inherit' }}>Cari unused imports di project ini</button>
                 </div>
               </div>
             ) : (
@@ -470,7 +475,7 @@ export default function App() {
                 const isUser = msg.role === 'user';
                 return (
                   <div key={i} className="msg-appear" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexDirection: isUser ? 'row-reverse' : 'row', maxWidth: 820, width: '100%', alignSelf: isUser ? 'flex-end' : 'flex-start' }}>
-                    <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: isUser ? 'linear-gradient(135deg,#6366f1,#3b82f6)' : 'rgba(99,102,241,0.15)', color: isUser ? '#fff' : '#a5b4fc', border: isUser ? 'none' : '1px solid rgba(99,102,241,0.25)', boxShadow: isUser ? '0 0 12px rgba(99,102,241,0.3)' : 'none' }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: isUser ? 'linear-gradient(135deg,#10b981,#06b6d4)' : 'rgba(16,185,129,0.15)', color: isUser ? '#fff' : '#a5b4fc', border: isUser ? 'none' : '1px solid rgba(99,102,241,0.25)', boxShadow: isUser ? '0 0 12px rgba(99,102,241,0.3)' : 'none' }}>
                       {isUser ? 'K' : 'AI'}
                     </div>
                     <div style={{ maxWidth: 'calc(100% - 42px)' }}>
@@ -481,7 +486,7 @@ export default function App() {
                         </div>
                       )}
                       {/* Bubble */}
-                      <div style={{ padding: '11px 15px', borderRadius: 14, borderTopLeftRadius: isUser ? 14 : 3, borderTopRightRadius: isUser ? 3 : 14, fontSize: 14, lineHeight: 1.75, ...(isUser ? { background: 'linear-gradient(135deg, rgba(99,102,241,0.5), rgba(59,130,246,0.45))', border: '1px solid rgba(99,102,241,0.35)', color: '#f1f5f9', backdropFilter: 'blur(12px)', boxShadow: '0 4px 20px rgba(99,102,241,0.15)' } : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0', backdropFilter: 'blur(12px)' }) }}>
+                      <div style={{ padding: '12px 16px', borderRadius: 14, borderTopLeftRadius: isUser ? 14 : 3, borderTopRightRadius: isUser ? 3 : 14, fontSize: 14, lineHeight: 1.75, ...(isUser ? { background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.1))', border: '1px solid rgba(255,215,0,0.3)', color: '#ffffff', backdropFilter: 'blur(16px)', boxShadow: '0 4px 24px rgba(255,215,0,0.2)', transition: 'all 0.3s ease' } : { background: 'rgba(30,33,50,0.6)', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', backdropFilter: 'blur(16px)', transition: 'all 0.3s ease' }) }}>
                         {isUser ? msg.content : <div className="md"><ReactMarkdown>{msg.content}</ReactMarkdown></div>}
                       </div>
                       <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.2)', marginTop: 5, textAlign: isUser ? 'right' : 'left', fontFamily: "'JetBrains Mono', monospace" }}>{msg.timestamp}</div>
@@ -494,8 +499,8 @@ export default function App() {
             {loading && (
               <div className="msg-appear" style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)' }}>AI</div>
-                <div style={{ padding: '13px 16px', borderRadius: 14, borderTopLeftRadius: 3, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)', display: 'flex', gap: 5, alignItems: 'center' }}>
-                  {[0, 150, 300].map(d => <span key={d} style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(165,180,252,0.6)', display: 'inline-block', animation: `dots 1.2s ease-in-out ${d}ms infinite` }} />)}
+                <div style={{ padding: '14px 18px', borderRadius: 14, borderTopLeftRadius: 3, background: 'rgba(30,33,50,0.7)', border: '1px solid rgba(255,215,0,0.2)', backdropFilter: 'blur(16px)', display: 'flex', gap: 6, alignItems: 'center', boxShadow: '0 0 12px rgba(255,215,0,0.1)' }}>
+                  {[0, 150, 300].map(d => <span key={d} style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,215,0,0.8)', display: 'inline-block', animation: `dots 1.2s ease-in-out ${d}ms infinite`, boxShadow: '0 0 8px rgba(255,215,0,0.4)' }} />)}
                 </div>
               </div>
             )}
@@ -504,17 +509,17 @@ export default function App() {
 
           {/* Input */}
           <div style={{ padding: '14px 24px 22px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '11px 12px', backdropFilter: 'blur(20px)', transition: 'border-color 0.2s, box-shadow 0.2s' }}
-              onFocusCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.5)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 0 0 3px rgba(99,102,241,0.08)'; }}
-              onBlurCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.1)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, background: 'rgba(30,33,50,0.7)', border: '1px solid rgba(255,215,0,0.2)', borderRadius: 14, padding: '12px 14px', backdropFilter: 'blur(24px)', transition: 'all 0.3s ease' }}
+              onFocusCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,215,0,0.4)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 0 0 3px rgba(255,215,0,0.1)'; }}
+              onBlurCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,215,0,0.2)'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}>
               <textarea ref={textareaRef} rows={1} value={input}
                 onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 130) + 'px'; }}
                 onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSend(); } }}
-                placeholder="Tanya tentang project kamu..."
+                placeholder="Ketik pertanyaan atau perintah edit kode..."
                 style={{ flex: 1, background: 'transparent', border: 'none', resize: 'none', fontSize: 14, color: '#e2e8f0', lineHeight: 1.6, maxHeight: 130, overflow: 'auto', outline: 'none' }} />
               <button onClick={() => handleSend()} disabled={loading || !input.trim()}
-                style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: loading || !input.trim() ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, #6366f1, #3b82f6)', color: loading || !input.trim() ? 'rgba(255,255,255,0.2)' : '#fff', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, transition: 'all 0.18s', boxShadow: loading || !input.trim() ? 'none' : '0 0 14px rgba(99,102,241,0.35)' }}
-                onMouseEnter={e => { if (!loading && input.trim()) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.05)'; }}
+                style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: loading || !input.trim() ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg, rgba(255,215,0,0.8), rgba(255,215,0,0.6))', color: loading || !input.trim() ? 'rgba(255,255,255,0.2)' : '#ffffff', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, transition: 'all 0.3s ease', boxShadow: loading || !input.trim() ? 'none' : '0 0 16px rgba(255,215,0,0.4)', animation: loading || !input.trim() ? 'none' : 'glow 2s ease-in-out infinite' }}
+                onMouseEnter={e => { if (!loading && input.trim()) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.1)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}>↑</button>
             </div>
             <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', textAlign: 'center', marginTop: 9, fontFamily: "'JetBrains Mono', monospace" }}>

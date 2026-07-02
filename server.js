@@ -40,12 +40,21 @@ app.use(cors());
 app.use(express.json());
 
 // ── Init agent ─────────────────────────────────────────────────
-const projectPath  = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
+let projectPath    = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
 const memory       = new Memory(path.join(__dirname, 'memory'));
-const scanner      = new ProjectScanner(projectPath);
+let scanner        = new ProjectScanner(projectPath);
 const skillManager = new SkillManager(path.join(__dirname, 'skills'));
-const agent        = new Agent({ apiKey, memory, scanner, projectPath, skillManager });
-
+let agent          = new Agent({
+  apiKey, memory, scanner, projectPath, skillManager,
+  perfOptions: {
+    logging: true,
+    verbose: false,     // server mode: less verbose
+    maxTokens: 32000,
+    windowSize: 15,
+    toolCacheSize: 200,
+    compressThreshold: 25,
+  }
+});
 console.log(`🤖 Agent siap! Provider: ${provider.toUpperCase()}`);
 
 // ── Routes ─────────────────────────────────────────────────────
@@ -155,6 +164,18 @@ app.get('/api/health', (_, res) => {
   res.json({ ok: true, provider, projectPath });
 });
 
+// Performance report
+app.get('/api/perf', (req, res) => {
+  const report = agent.getPerfReport();
+  res.json(report);
+});
+
+// Reset conversation
+app.post('/api/reset', (req, res) => {
+  agent.resetConversation();
+  res.json({ ok: true, message: 'Conversation & cache reset' });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend Agent JALAN di http://localhost:${PORT}`);
 });
@@ -175,8 +196,20 @@ app.post('/api/upload-folder', upload.array('files'), async (req, res) => {
     }
     
     // Re-init scanner ke folder baru
-    const newScanner = new ProjectScanner(uploadPath);
-    const info = await newScanner.quickScan();
+    projectPath = uploadPath;
+    scanner = new ProjectScanner(projectPath);
+    agent = new Agent({
+      apiKey, memory, scanner, projectPath, skillManager,
+      perfOptions: {
+        logging: true,
+        verbose: false,
+        maxTokens: 32000,
+        windowSize: 15,
+        toolCacheSize: 200,
+        compressThreshold: 25,
+      }
+    });
+    const info = await scanner.quickScan();
     
     res.json({
       projectPath: uploadPath,

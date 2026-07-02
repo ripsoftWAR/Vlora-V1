@@ -52,7 +52,17 @@ async function main() {
   const memory = new Memory(path.join(__dirname, 'memory'));
   const scanner = new ProjectScanner(projectPath);
   const skillManager = new SkillManager(path.join(__dirname, 'skills'));
-  const agent = new Agent({ apiKey, memory, scanner, projectPath, skillManager });
+  const agent = new Agent({
+    apiKey, memory, scanner, projectPath, skillManager,
+    perfOptions: {
+      logging: true,
+      verbose: true,      // tampilkan log tiap tool & LLM call
+      maxTokens: 32000,
+      windowSize: 15,
+      toolCacheSize: 200,
+      compressThreshold: 25,
+    }
+  });
 
   // Initial scan
   console.log(chalk.yellow('\n⚡ Scanning project...'));
@@ -70,7 +80,7 @@ async function main() {
     console.log(chalk.blue(`🧠 Memory loaded: ${memSummary}`));
   }
 
-  console.log(chalk.gray('\nKetik pertanyaanmu. Commands: /skill, /scan, /tree, /memory, /reset, /help, /exit\n'));
+  console.log(chalk.gray('\nKetik pertanyaanmu. Commands: /skill, /scan, /tree, /memory, /reset, /perf, /help, /exit\n'));
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -204,7 +214,14 @@ ${chalk.gray('Contoh: /skill add rag-blueprint')}
 
     if (input === '/reset') {
       await memory.reset(projectPath);
-      console.log(chalk.red('🗑️  Memory direset.'));
+      agent.resetConversation();
+      console.log(chalk.red('🗑️  Memory & conversation direset.'));
+      rl.prompt();
+      return;
+    }
+
+    if (input === '/perf') {
+      agent.printPerfReport();
       rl.prompt();
       return;
     }

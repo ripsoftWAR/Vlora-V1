@@ -49,26 +49,31 @@ export class Memory {
   }
 
   async addMessage(projectPath, message) {
+    // Fire-and-forget: jangan block agent loop
+    this._addMessageAsync(projectPath, message).catch(() => {});
+  }
+
+  async _addMessageAsync(projectPath, message) {
     const mem = await this._load(projectPath);
     mem.messages.push({
       ...message,
       timestamp: new Date().toISOString(),
     });
 
-    // Keep last 100 messages
-    if (mem.messages.length > 100) {
-      mem.messages = mem.messages.slice(-100);
+    // Keep last 150 messages (increased from 100)
+    if (mem.messages.length > 150) {
+      mem.messages = mem.messages.slice(-150);
     }
 
     // Auto-extract facts from assistant messages
-    if (message.role === 'assistant') {
-      await this._extractFacts(mem, message.content);
+    if (message.role === 'assistant' && message.content) {
+      this._extractFactsSync(mem, message.content);
     }
 
     await this._save(projectPath, mem);
   }
 
-  async _extractFacts(mem, content) {
+  _extractFactsSync(mem, content) {
     // Simple heuristic: look for key insights in responses
     const factPatterns = [
       /menggunakan\s+([A-Za-z\s]+)\s+sebagai/gi,

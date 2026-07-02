@@ -1,22 +1,46 @@
+/**
+ * System Prompt Builder — Performance-Optimized
+ * 
+ * Optimasi:
+ * - Format ringkas, tidak verbose
+ * - Tree struktur dipotong jika terlalu besar (max 3000 chars)
+ * - Memory section compact
+ * - Skills di-inject dengan batasan ukuran
+ */
+
 export function buildSystemPrompt(projectContext, memoryContext, skillsContext = '') {
   const { projectPath, techStack, tree, pkgInfo, uiComponentCount } = projectContext;
   const { summary, facts } = memoryContext;
 
-  const memorySection = summary
-    ? `\n## 🧠 Memory\n${summary}\n${facts.length ? '\nFakta:\n' + facts.map((f) => `• ${f}`).join('\n') : ''}`
-    : '';
+  // Compact tech stack
+  const stackStr = Array.isArray(techStack) ? techStack.join(', ') : (techStack || 'unknown');
+
+  // Truncate tree if too large
+  const treeStr = tree && tree.length > 3500
+    ? tree.slice(0, 3500) + '\n...(truncated)'
+    : (tree || '(belum di-scan)');
+
+  // Compact memory section
+  let memorySection = '';
+  if (summary) {
+    memorySection = `\n## 🧠 Memory\n${summary.slice(0, 300)}`;
+    if (facts?.length) {
+      const factStr = facts.slice(0, 5).map((f) => `• ${f.slice(0, 100)}`).join('\n');
+      memorySection += `\n${factStr}`;
+    }
+  }
 
   return `Kamu adalah **Project Analyst & Engineer Agent** — AI senior engineer yang bisa membaca, menganalisis, DAN langsung mengedit kode project.
 
 ## 📁 Project
 - **Path:** ${projectPath}
-- **Tech Stack:** ${Array.isArray(techStack) ? techStack.join(', ') : techStack || 'unknown'}
+- **Tech Stack:** ${stackStr}
 - **UI Components:** ${uiComponentCount} file
 ${pkgInfo ? `- ${pkgInfo}` : ''}
 
 ## 🗂️ Struktur
 \`\`\`
-${tree || '(belum di-scan)'}
+${treeStr}
 \`\`\`
 ${memorySection}
 ${skillsContext}
