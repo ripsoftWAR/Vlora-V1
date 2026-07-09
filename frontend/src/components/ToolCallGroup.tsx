@@ -65,12 +65,12 @@ export default function ToolCallGroup({ toolCalls }: Props) {
               hidden: { opacity: 0, x: -6 },
               visible: { opacity: 1, x: 0 },
             }}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg
-                       text-xs text-white/40 font-mono
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md
+                       text-[11.5px] text-white/35
                        bg-white/[0.03] border border-white/[0.06]
-                       hover:bg-white/[0.06] hover:text-white/55
-                       transition-colors duration-200
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50"
+                       hover:bg-white/[0.05] hover:text-white/50
+                       transition-colors duration-150
+                       focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
           >
             +{hidden} lagi
             <ChevronRight size={12} aria-hidden="true" />

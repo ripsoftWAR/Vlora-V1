@@ -100,7 +100,8 @@ export default function ChatMessage({ message }: Props) {
         mass: 0.8,
       }}
       className={`
-        flex gap-3 items-start max-w-[780px] w-full
+        flex gap-3 items-start max-w-[780px] w-full px-3 py-2.5 rounded-xl
+        hover:bg-white/[0.02] transition-colors duration-150
         ${isUser ? 'flex-row-reverse self-end' : 'self-start'}
       `}
     >
@@ -114,8 +115,8 @@ export default function ChatMessage({ message }: Props) {
         className={`
           w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0
           ${isUser
-            ? 'bg-gradient-to-br from-indigo-500 to-blue-500 shadow-lg shadow-indigo-500/25'
-            : 'bg-white/[0.06] border border-white/[0.08]'
+            ? 'bg-indigo-500/80'
+            : 'bg-white/[0.04] border border-white/[0.07]'
           }
         `}
       >
@@ -138,8 +139,8 @@ export default function ChatMessage({ message }: Props) {
           className={`
             relative px-4 py-3 rounded-2xl text-[14.5px] leading-[1.75]
             ${isUser
-              ? 'bg-gradient-to-br from-indigo-500/50 to-blue-500/40 border border-indigo-400/30 text-white shadow-lg shadow-indigo-500/10 rounded-tr-md backdrop-blur-xl'
-              : 'bg-white/[0.04] border border-white/[0.07] text-slate-200 rounded-tl-md backdrop-blur-xl border-l-[3px] border-l-indigo-400/30'
+              ? 'bg-white/[0.07] border border-white/[0.10] text-white/90 rounded-[14px_14px_4px_14px]'
+              : 'text-white/80'
             }
           `}
         >

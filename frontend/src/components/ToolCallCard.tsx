@@ -14,7 +14,7 @@ const cardVariants = {
     opacity: 1,
     x: 0,
     scale: 1,
-    transition: { type: 'spring', stiffness: 500, damping: 28 },
+    transition: { type: 'spring' as const, stiffness: 500, damping: 28 },
   },
 };
 
@@ -32,13 +32,13 @@ export default function ToolCallCard({ name, status, preview }: Props) {
       variants={cardVariants}
       layout
       className={`
-        inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg
-        text-xs font-medium font-mono
-        transition-colors duration-300 ease-out
+        inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md
+        text-[11.5px] font-medium
+        transition-colors duration-200
         ${isDone
           ? 'bg-white/[0.03] border border-white/[0.06] text-white/45'
           : isRunning
-            ? 'bg-white/[0.06] border border-white/[0.12] shadow-[0_0_12px_rgba(99,102,241,0.12)]'
+            ? 'bg-white/[0.05] border border-white/[0.10]'
             : 'bg-red-500/[0.06] border border-red-500/20 text-red-400'
         }
       `}

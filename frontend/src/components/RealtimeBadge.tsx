@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   FileText, Pencil, Wrench, Trash2, FolderOpen, Search,
   FileSearch, Terminal, FlaskConical, Palette, BookOpen,
-  Loader2, Sparkles, Zap,
+  Loader2, Sparkles,
 } from 'lucide-react';
 
 // ── Tool → Icon mapping ────────────────────────────────────────
@@ -56,8 +56,8 @@ export default function RealtimeBadge({ toolName }: Props) {
         rounded-2xl shadow-2xl backdrop-blur-2xl
         border transition-all duration-500 ease-out
         ${isActive
-          ? 'opacity-100 translate-y-0 scale-100 border-white/15 bg-white/10 shadow-[0_0_30px_rgba(99,102,241,0.25)]'
-          : 'opacity-0 -translate-y-4 scale-95 border-white/5 bg-white/5'
+          ? 'opacity-100 translate-y-0 scale-100 border-white/[0.08] bg-black/60'
+          : 'opacity-0 -translate-y-3 scale-97 border-white/[0.04] bg-black/40'
         }
       `}
     >
@@ -93,26 +93,16 @@ export default function RealtimeBadge({ toolName }: Props) {
 
       {/* Label */}
       <div className="flex flex-col">
-        <span className="text-xs font-semibold text-white/55 tracking-widest uppercase">
-          Agent Action
+        <span className="text-[10px] text-white/30 uppercase tracking-wider">
+          Sedang berjalan
         </span>
         <span
-          className="text-[13px] font-semibold tracking-tight"
+          className="text-[13px] font-medium"
           style={{ color: config.color }}
         >
           {config.label}
         </span>
       </div>
-
-      {/* Sparkle */}
-      {isActive && (
-        <Zap
-          size={12}
-          className="animate-pulse ml-1"
-          style={{ color: config.color }}
-          aria-hidden="true"
-        />
-      )}
     </div>
   );
 }
