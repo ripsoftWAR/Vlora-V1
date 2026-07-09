@@ -30,7 +30,7 @@ export default function InputArea({ value, onChange, onSend, onStop, loading }: 
   const canSend = hasText && !loading;
 
   return (
-    <div className="px-6 pb-6 pt-3 border-t border-white/[0.05] bg-white/[0.01] backdrop-blur-xl">
+    <div className="pb-[18px] pt-[9px]">
       {/* Keyboard hint — muncul saat user mulai mengetik */}
       <AnimatePresence>
         {hasText && !loading && (
@@ -39,12 +39,11 @@ export default function InputArea({ value, onChange, onSend, onStop, loading }: 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.2 }}
-            className="flex justify-end mb-1.5"
+            className="flex justify-end mb-[7px]"
           >
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md
-                           text-[11px] text-white/30 font-mono
-                           bg-white/[0.02] border border-white/[0.04]">
-              <CornerDownLeft size={10} aria-hidden="true" />
+            <span className="inline-flex items-center gap-[5px] px-[9px] py-[2px] rounded-md
+                           text-[12px] text-white/20 font-mono">
+              <CornerDownLeft size={11} aria-hidden="true" />
               Enter
             </span>
           </motion.div>
@@ -52,10 +51,10 @@ export default function InputArea({ value, onChange, onSend, onStop, loading }: 
       </AnimatePresence>
 
       <div
-        className="flex items-end gap-2.5 bg-white/[0.04] border border-white/[0.08]
-                   rounded-2xl px-4 py-3 backdrop-blur-2xl
+        className="flex items-end gap-[11px] bg-white/[0.04] border border-white/[0.06]
+                   rounded-2xl px-[16px] py-[10px]
                    transition-all duration-300
-                   focus-within:border-indigo-400/40 focus-within:shadow-[0_0_0_4px_rgba(99,102,241,0.06)]"
+                   focus-within:border-white/[0.12] focus-within:bg-white/[0.05]"
       >
         <textarea
           ref={textareaRef}
@@ -64,15 +63,14 @@ export default function InputArea({ value, onChange, onSend, onStop, loading }: 
           onChange={(e) => {
             onChange(e.target.value);
             e.target.style.height = 'auto';
-            e.target.style.height = Math.min(e.target.scrollHeight, 130) + 'px';
+            e.target.style.height = Math.min(e.target.scrollHeight, 143) + 'px';
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Tanya tentang project kamu..."
           aria-label="Ketik pertanyaan tentang project"
           disabled={loading}
-          className="flex-1 bg-transparent border-none resize-none text-[14px]
-                     text-slate-200 placeholder-white/45 leading-relaxed
-                     max-h-[130px] outline-none
+          className="flex-1 bg-transparent border-none resize-none text-[17px]
+                     text-white/80 placeholder-white/25 leading-relaxed
+                     max-h-[143px] outline-none
                      disabled:opacity-40 disabled:cursor-not-allowed"
         />
 
@@ -86,13 +84,13 @@ export default function InputArea({ value, onChange, onSend, onStop, loading }: 
             exit={{ scale: 0, opacity: 0 }}
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.92 }}
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0
-                       bg-red-500/15 border border-red-400/30 text-red-400
-                       hover:bg-red-500/25
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0
+                       bg-white/[0.06] text-white/50
+                       hover:bg-white/[0.10] hover:text-white/70
                        transition-colors duration-200 cursor-pointer
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+                       focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
           >
-            <Square size={12} fill="currentColor" />
+            <Square size={13} fill="currentColor" />
           </motion.button>
         )}
 
@@ -103,24 +101,24 @@ export default function InputArea({ value, onChange, onSend, onStop, loading }: 
           whileHover={canSend ? { scale: 1.08 } : {}}
           whileTap={canSend ? { scale: 0.9 } : {}}
           className={`
-            w-9 h-9 rounded-xl flex items-center justify-center
+            w-10 h-10 rounded-xl flex items-center justify-center
             flex-shrink-0 transition-all duration-200
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50
+            focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20
             ${canSend
-              ? 'bg-gradient-to-br from-indigo-500 to-blue-500 text-white shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/40 cursor-pointer'
-              : 'bg-white/[0.04] text-white/15 cursor-not-allowed'
+              ? 'bg-white/[0.10] text-white/80 hover:bg-white/[0.15] cursor-pointer'
+              : 'bg-transparent text-white/10 cursor-not-allowed'
             }
           `}
         >
           {loading ? (
-            <Loader2 size={16} className="animate-spin" />
+            <Loader2 size={18} className="animate-spin" />
           ) : (
-            <Send size={15} />
+            <Send size={17} />
           )}
         </motion.button>
       </div>
 
-      <p className="text-xs font-mono text-white/35 text-center mt-2.5">
+      <p className="text-[13px] font-mono text-white/20 text-center mt-[6px]">
         Ctrl+Enter kirim · /scan /memory /tree /help
       </p>
     </div>

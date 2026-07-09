@@ -46,30 +46,30 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   }, [code]);
 
   return (
-    <div className="relative group/code my-2">
-      <div className="flex items-center justify-between px-3 py-1.5
-                    bg-white/[0.06] border border-white/[0.06] border-b-0
-                    rounded-t-lg">
-        <span className="text-xs font-mono text-white/40 uppercase tracking-wider">
+    <div className="relative group/code my-[9px]">
+      <div className="flex items-center justify-between px-[13px] py-[7px]
+                    bg-white/[0.03] border border-white/[0.05] border-b-0
+                    rounded-t-md">
+        <span className="text-[12px] font-mono text-white/30 uppercase tracking-wider">
           {lang || 'code'}
         </span>
         <motion.button
           onClick={handleCopy}
           aria-label={copied ? 'Tersalin' : 'Salin kode'}
-          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md
-                     text-xs text-white/40 hover:text-white/55
-                     hover:bg-white/[0.06] transition-colors duration-200
-                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50"
+          className="flex items-center gap-[7px] px-[9px] py-[2px] rounded
+                     text-[12px] text-white/25 hover:text-white/45
+                     hover:bg-white/[0.04] transition-colors duration-200
+                     focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
           whileTap={{ scale: 0.92 }}
         >
           {copied ? (
             <>
-              <Check size={12} className="text-emerald-400" />
-              <span className="text-emerald-400">Tersalin</span>
+              <Check size={13} className="text-emerald-500" />
+              <span className="text-emerald-500">Tersalin</span>
             </>
           ) : (
             <>
-              <Copy size={12} />
+              <Copy size={13} />
               <span>Salin</span>
             </>
           )}
@@ -113,10 +113,9 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
       className={`
-        flex gap-3 items-start max-w-[720px] px-3 py-2.5 rounded-xl
-        ${isUser ? 'flex-row-reverse self-end w-fit ml-auto' : 'self-start w-full'}
+        flex gap-[13px] items-start
+        ${isUser ? 'flex-row-reverse self-end ml-auto max-w-[75%]' : 'self-start w-full'}
       `}
-      style={{ willChange: 'auto' }}
     >
       {/* Avatar */}
       <motion.div
@@ -126,32 +125,32 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
         animate={{ scale: 1 }}
         transition={{ type: 'spring', stiffness: 500, damping: 25, delay: 0.08 }}
         className={`
-          w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0
+          w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0
           ${isUser
-            ? 'bg-indigo-500/80'
-            : 'bg-white/[0.04] border border-white/[0.07]'
+            ? 'bg-white/[0.10]'
+            : 'bg-white/[0.04]'
           }
         `}
       >
         {isUser ? (
-          <User size={14} className="text-white" aria-hidden="true" />
+          <User size={14} className="text-white/70" aria-hidden="true" />
         ) : (
-          <Bot size={14} className="text-indigo-300" aria-hidden="true" />
+          <Bot size={14} className="text-white/50" aria-hidden="true" />
         )}
       </motion.div>
 
       {/* Content */}
       <div className={`
-        max-w-[calc(100%-44px)] min-w-0
-        ${isUser ? '' : 'flex-1'}
+        min-w-0
+        ${isUser ? 'max-w-full' : 'max-w-[75%] flex-1'}
       `}>
         {/* Interleaved blocks — text & tool cards berseling */}
         {isUser ? (
-          <div className="bg-white/[0.07] border border-white/[0.10] text-white/90 rounded-[14px_14px_4px_14px] px-4 py-2.5 text-[14.5px] leading-[1.75] w-fit max-w-full">
+          <div className="bg-white/[0.06] text-white/85 rounded-[15px_15px_4px_15px] px-[18px] py-[11px] text-[17px] leading-[1.75] w-fit max-w-full">
             <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : hasBlocks ? (
-          <div className="border-l-2 border-white/[0.06] pl-3 flex flex-col gap-1.5">
+          <div className="flex flex-col gap-[7px]">
             {blocks.map((block, bi) => {
               const isLastBlock = bi === blocks.length - 1;
               const isLastTextBlock = block.type === 'text' && isLastBlock && isStreaming;
@@ -168,7 +167,7 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
               ) : (
                 <div
                   key={bi}
-                  className={`text-white/80 text-[14.5px] leading-[1.75] md-content ${isLastTextBlock ? 'streaming-cursor' : ''}`}
+                  className={`text-white/75 text-[17px] leading-[1.78] md-content ${isLastTextBlock ? 'streaming-cursor' : ''}`}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
@@ -198,21 +197,21 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
         ) : null}
 
         {/* Timestamp + Message Actions */}
-        <div className={`flex items-center gap-2 mt-1.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-          <p className="text-xs font-mono text-white/40">
+        <div className={`flex items-center gap-[9px] mt-[7px] ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+          <p className="text-[13px] font-mono text-white/25">
             {message.timestamp}
           </p>
 
           {/* Actions — always visible, ultra subtle */}
           {!isUser && allText.trim().length > 0 && (
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-[2px]">
               {/* Copy */}
               <button
                 onClick={handleCopyMessage}
                 aria-label={copied ? 'Tersalin' : 'Salin pesan'}
-                className="p-1 rounded hover:bg-white/[0.06] text-white/20 hover:text-white/45 transition-colors"
+                className="p-[5px] rounded hover:bg-white/[0.04] text-white/15 hover:text-white/35 transition-colors"
               >
-                {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
               </button>
 
               {/* Regenerate */}
@@ -220,9 +219,9 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
                 <button
                   onClick={onRegenerate}
                   aria-label="Regenerasi jawaban"
-                  className="p-1 rounded hover:bg-white/[0.06] text-white/20 hover:text-white/45 transition-colors"
+                  className="p-[5px] rounded hover:bg-white/[0.04] text-white/15 hover:text-white/35 transition-colors"
                 >
-                  <RefreshCw size={12} />
+                  <RefreshCw size={13} />
                 </button>
               )}
             </div>

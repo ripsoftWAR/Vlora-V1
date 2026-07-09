@@ -1,32 +1,33 @@
-import { useState, useRef } from 'react';
-import {
-  FolderOpen, MessageSquarePlus, X, ChevronRight,
-  Sparkles, Layers,
-} from 'lucide-react';
+import { useRef } from 'react';
+import { FolderOpen, MessageSquarePlus, Sparkles, MessageSquare, Trash2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
-interface FileNode {
-  name: string;
-  type: 'file' | 'dir';
-  children?: FileNode[];
+interface Session {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
 }
 
 interface Props {
   open: boolean;
+  collapsed: boolean;
   onClose: () => void;
-  project: {
-    totalFiles: number;
-    techStack: string[];
-    skills: string[];
-    files?: FileNode[];
-  };
+  onToggleCollapse: () => void;
   selectedPath: string;
   onFolderUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onNewChat: () => void;
+  sessions: Session[];
+  activeSessionId: string | null;
+  onSwitchSession: (id: string) => void;
+  onDeleteSession: (id: string) => void;
 }
 
-export default function Sidebar({ open, onClose, project, selectedPath, onFolderUpload, onNewChat }: Props) {
+export default function Sidebar({
+  open, collapsed, onClose, onToggleCollapse, selectedPath, onFolderUpload, onNewChat,
+  sessions, activeSessionId, onSwitchSession, onDeleteSession,
+}: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const techStack = project.techStack?.length ? project.techStack : ['Node.js', 'React', 'TypeScript', 'Express'];
 
   return (
     <>
@@ -39,226 +40,245 @@ export default function Sidebar({ open, onClose, project, selectedPath, onFolder
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — full mode */}
       <aside
         role="navigation"
         aria-label="Sidebar navigasi"
         className={`
-          fixed lg:static inset-y-0 left-0 z-50 w-[260px]
-          flex flex-col bg-white/[0.03] backdrop-blur-2xl
-          border-r border-white/[0.06]
-          transition-transform duration-300 ease-out
-          lg:translate-x-0
-          ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          fixed lg:static inset-y-0 left-0 z-50
+          flex flex-col bg-white/[0.02] backdrop-blur-2xl
+          border-r border-white/[0.04]
+          transition-all duration-300 ease-out
+          ${collapsed ? 'lg:w-[56px]' : 'w-[260px] lg:w-[260px]'}
+          ${open
+            ? 'translate-x-0'
+            : '-translate-x-full lg:translate-x-0'
+          }
         `}
       >
-        {/* Header */}
-        <div className="p-5 pb-4 border-b border-white/[0.05]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500
-                          flex items-center justify-center shadow-lg shadow-indigo-500/30">
-              <Sparkles size={16} className="text-white" aria-hidden="true" />
+        {/* ── COLLAPSED MODE ── */}
+        {collapsed ? (
+          <>
+            {/* Logo mini */}
+            <div className="flex justify-center pt-4 pb-3">
+              <button
+                onClick={onToggleCollapse}
+                className="w-8 h-8 rounded-xl bg-white/[0.08] flex items-center justify-center
+                           hover:bg-white/[0.12] transition-colors"
+                aria-label="Lebarkan sidebar"
+                title="Lebarkan sidebar"
+              >
+                <Sparkles size={15} className="text-white/50" aria-hidden="true" />
+              </button>
             </div>
-            <div className="min-w-0">
-              <h2 className="text-[13px] font-semibold text-slate-200 tracking-tight truncate">
-                Analyst Agent
-              </h2>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" aria-hidden="true" />
-                <span className="text-xs font-mono text-white/40">llama-3.3-70b</span>
-              </div>
-            </div>
-            {/* Close (mobile) */}
-            <button
-              onClick={onClose}
-              aria-label="Tutup sidebar"
-              className="lg:hidden p-1.5 rounded-lg hover:bg-white/[0.06] text-white/30
-                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </div>
-        </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto py-3 space-y-1">
-          {/* Project Section */}
-          <Section title="Project">
-            <input
-              ref={fileInputRef}
-              type="file"
-              // @ts-expect-error webkitdirectory is valid
-              webkitdirectory=""
-              multiple
-              className="hidden"
-              onChange={onFolderUpload}
-              aria-label="Pilih folder project"
-            />
+            <div className="mx-3 h-px bg-white/[0.04]" />
 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 mx-3
-                         rounded-xl text-[12px] font-medium
-                         bg-indigo-500/[0.08] border border-indigo-400/20
-                         text-indigo-300 hover:bg-indigo-500/[0.14]
-                         transition-all duration-200
-                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50"
-            >
-              <FolderOpen size={14} aria-hidden="true" />
-              <span>Pilih Folder Project</span>
-            </button>
-
-            {selectedPath && (
-              <div className="flex items-center gap-2 mx-3 mt-2 px-2.5 py-1.5
-                            rounded-lg bg-white/[0.03] text-xs text-white/55">
-                <span aria-hidden="true">📁</span>
-                <span className="truncate font-mono">{selectedPath}</span>
-              </div>
-            )}
-
-            {project.totalFiles > 0 && (
-              <p className="px-4 mt-1.5 text-xs text-white/40">
-                {project.totalFiles} file terdeteksi
-              </p>
-            )}
-
-            {/* File Tree */}
-            <div className="mt-2 px-3" role="tree" aria-label="Struktur file project">
-              <FileTree nodes={project.files || []} />
-            </div>
-          </Section>
-
-          {/* Tech Stack */}
-          <Section title="Tech Stack">
-            <div className="flex flex-wrap gap-1.5 px-3">
-              {techStack.map((t) => (
-                <span
-                  key={t}
-                  className="px-2 py-0.5 rounded-md text-xs font-medium
-                           bg-white/[0.04] border border-white/[0.06] text-white/45"
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-          </Section>
-
-          {/* Active Skills */}
-          {project.skills?.length > 0 && (
-            <Section title={`Skills (${project.skills.length})`}>
-              <div className="space-y-0.5 px-3">
-                {project.skills.map((s) => (
-                  <div
-                    key={s}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg
-                             text-xs text-white/40"
-                  >
-                    <Layers size={12} className="text-indigo-400/60" aria-hidden="true" />
-                    <span>{s}</span>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-3 border-t border-white/[0.05]">
-          <button
-            onClick={onNewChat}
-            aria-label="Mulai chat baru"
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5
-                       rounded-xl text-[12px] font-medium text-white/35
-                       bg-white/[0.03] border border-white/[0.06]
-                       hover:bg-white/[0.06] hover:text-white/55
-                       transition-all duration-200
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50"
-          >
-            <MessageSquarePlus size={14} aria-hidden="true" />
-            <span>Chat baru</span>
-          </button>
-        </div>
-      </aside>
-    </>
-  );
-}
-
-// ── Section ──────────────────────────────────────────────────
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="py-1.5">
-      <h3 className="px-4 py-1.5 text-xs font-semibold text-white/40
-                     tracking-[0.1em] uppercase">
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
-
-// ── File Tree ────────────────────────────────────────────────
-function FileTree({ nodes, depth = 0 }: { nodes: FileNode[]; depth?: number }) {
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-
-  const toggle = (name: string, type: 'file' | 'dir') => {
-    if (type === 'dir') {
-      setOpen((p) => ({ ...p, [name]: !p[name] }));
-    }
-  };
-
-  return (
-    <>
-      {nodes.map((n) => (
-        <div key={n.name}>
-          <div
-            role="treeitem"
-            aria-expanded={n.type === 'dir' ? open[n.name] || false : undefined}
-            aria-selected={false}
-            tabIndex={0}
-            onClick={() => toggle(n.name, n.type)}
-            onKeyDown={(e) => {
-              if (n.type === 'dir' && (e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault();
-                toggle(n.name, n.type);
-              }
-              if (e.key === 'ArrowRight' && n.type === 'dir' && !open[n.name]) {
-                e.preventDefault();
-                setOpen((p) => ({ ...p, [n.name]: true }));
-              }
-              if (e.key === 'ArrowLeft' && n.type === 'dir' && open[n.name]) {
-                e.preventDefault();
-                setOpen((p) => ({ ...p, [n.name]: false }));
-              }
-            }}
-            className={`
-              flex items-center gap-1.5 py-[3px] rounded-md
-              text-xs cursor-pointer select-none
-              transition-colors duration-100
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 focus-visible:ring-inset
-              ${n.type === 'dir' ? 'text-white/60 hover:text-white/85' : 'text-white/35 hover:text-white/55'}
-            `}
-            style={{ paddingLeft: depth * 12 + 4 }}
-          >
-            {n.type === 'dir' ? (
-              <ChevronRight
-                size={11}
-                aria-hidden="true"
-                className={`text-white/40 transition-transform ${open[n.name] ? 'rotate-90' : ''}`}
+            {/* Upload icon */}
+            <div className="flex justify-center py-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                // @ts-expect-error webkitdirectory is valid
+                webkitdirectory=""
+                multiple
+                className="hidden"
+                onChange={onFolderUpload}
+                aria-label="Pilih folder project"
               />
-            ) : (
-              <span className="w-[11px] text-center text-white/15" aria-hidden="true">·</span>
-            )}
-            <span className={n.type === 'file' ? 'font-mono text-xs' : 'font-medium'}>
-              {n.name}
-            </span>
-          </div>
-          {n.type === 'dir' && open[n.name] && n.children && (
-            <div role="group">
-              <FileTree nodes={n.children} depth={depth + 1} />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 rounded-lg text-white/25 hover:text-white/50 hover:bg-white/[0.04] transition-colors"
+                aria-label="Buka folder"
+                title="Buka folder"
+              >
+                <FolderOpen size={16} aria-hidden="true" />
+              </button>
             </div>
-          )}
-        </div>
-      ))}
+
+            <div className="mx-3 h-px bg-white/[0.04]" />
+
+            {/* New chat icon */}
+            <div className="flex justify-center py-3">
+              <button
+                onClick={() => { onNewChat(); onClose(); }}
+                className="p-2 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.06]
+                           border border-white/[0.06] hover:border-white/[0.1] transition-colors"
+                aria-label="Chat baru"
+                title="Chat baru"
+              >
+                <MessageSquarePlus size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Expand button */}
+            <div className="flex justify-center py-3 border-t border-white/[0.03]">
+              <button
+                onClick={onToggleCollapse}
+                className="p-2 rounded-lg text-white/20 hover:text-white/50 hover:bg-white/[0.04] transition-colors"
+                aria-label="Lebarkan sidebar"
+                title="Lebarkan sidebar"
+              >
+                <PanelLeftOpen size={16} />
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* ── EXPANDED MODE ── */}
+
+            {/* Header */}
+            <div className="px-4 pt-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-white/[0.08] flex items-center justify-center flex-shrink-0">
+                    <Sparkles size={15} className="text-white/50" aria-hidden="true" />
+                  </div>
+                  <span className="text-[14px] font-medium text-white/60 tracking-tight whitespace-nowrap">Vlora AI</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {/* Desktop: collapse toggle */}
+                  <button
+                    onClick={onToggleCollapse}
+                    aria-label="Perkecil sidebar"
+                    className="hidden lg:flex p-1.5 rounded-lg text-white/20 hover:text-white/50 hover:bg-white/[0.04] transition-colors"
+                  >
+                    <PanelLeftClose size={16} />
+                  </button>
+                  {/* Mobile: close button */}
+                  <button
+                    onClick={onClose}
+                    aria-label="Tutup sidebar"
+                    className="lg:hidden p-1.5 rounded-lg text-white/20 hover:text-white/50 hover:bg-white/[0.04] transition-colors"
+                  >
+                    <PanelLeftClose size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Provider & developer badge — hidden for now */}
+              {/* <div className="mt-2 ml-[42px] flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-emerald-400/35 flex-shrink-0" />
+                  <span className="text-[11px] text-white/25 tracking-wide">DeepSeek</span>
+                </div>
+                <span className="text-[9px] text-white/10">powered by finework.id</span>
+              </div> */}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-4 h-px bg-white/[0.04]" />
+
+            {/* Actions */}
+            <div className="px-3 py-3 space-y-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                // @ts-expect-error webkitdirectory is valid
+                webkitdirectory=""
+                multiple
+                className="hidden"
+                onChange={onFolderUpload}
+                aria-label="Pilih folder project"
+              />
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg
+                           text-white/30 hover:text-white/55 hover:bg-white/[0.04]
+                           transition-all duration-200 text-[13px]
+                           focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+              >
+                <FolderOpen size={15} aria-hidden="true" />
+                <span>Buka folder</span>
+              </button>
+
+              {selectedPath && (
+                <p className="px-3 py-1 text-[11px] text-white/15 truncate" title={selectedPath}>
+                  📁 {selectedPath}
+                </p>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-4 h-px bg-white/[0.04]" />
+
+            {/* New Chat button */}
+            <div className="px-3 py-3">
+              <button
+                onClick={() => { onNewChat(); onClose(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg
+                           text-white/40 hover:text-white/70 hover:bg-white/[0.06]
+                           border border-white/[0.06] hover:border-white/[0.1]
+                           transition-all duration-200 text-[13px]
+                           focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+              >
+                <MessageSquarePlus size={15} aria-hidden="true" />
+                <span>Chat baru</span>
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div className="mx-4 h-px bg-white/[0.04]" />
+
+            {/* Session list */}
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+              <h2 className="text-[11px] font-medium text-white/25 uppercase tracking-wider px-3 mb-2">
+                Riwayat Chat
+              </h2>
+
+              {sessions.length === 0 ? (
+                <p className="text-[12px] text-white/15 px-3 py-4 text-center">
+                  Belum ada riwayat
+                </p>
+              ) : (
+                <div className="space-y-0.5">
+                  {sessions.map((s) => (
+                    <div
+                      key={s.id}
+                      className={`
+                        group/item flex items-center gap-2.5 px-3 py-2 rounded-lg
+                        cursor-pointer transition-all duration-150
+                        ${s.id === activeSessionId
+                          ? 'bg-white/[0.06] text-white/70'
+                          : 'text-white/30 hover:text-white/50 hover:bg-white/[0.03]'
+                        }
+                      `}
+                      onClick={() => { onSwitchSession(s.id); onClose(); }}
+                    >
+                      <MessageSquare size={13} className="flex-shrink-0" />
+                      <span className="flex-1 text-[12px] truncate leading-snug">
+                        {s.title}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteSession(s.id);
+                        }}
+                        aria-label={`Hapus sesi: ${s.title}`}
+                        className="p-0.5 rounded text-white/10 hover:text-red-400
+                                   opacity-0 group-hover/item:opacity-100 transition-all"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 py-2.5 border-t border-white/[0.03]">
+              <p className="text-[9px] text-white/10 text-center">
+                Project Analyst & Engineer Agent
+              </p>
+            </div>
+          </>
+        )}
+      </aside>
     </>
   );
 }

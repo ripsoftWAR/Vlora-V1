@@ -22,6 +22,15 @@ function formatPreview(name: string, raw: string): string {
   }
 
   if (name === 'write_file' || name === 'edit_file') {
+    // Ekstrak path dari: ✅ Edit berhasil di "frontend/src/..."
+    const quoteMatch = raw.match(/"([^"]+)"/);
+    if (quoteMatch) return quoteMatch[1];
+
+    // Ekstrak path dari: ✅ File berhasil dibuat: frontend/src/...
+    const colonMatch = raw.match(/:\s*(.+)/);
+    if (colonMatch) return colonMatch[1].trim();
+
+    // Fallback: path ada di argumen (write_file selalu punya file_path)
     if (raw.startsWith('✅')) return 'Berhasil';
     if (raw.startsWith('❌')) return 'Gagal';
     return raw.slice(0, 50);
@@ -64,8 +73,8 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
         onClick={() => hasDetail && isDone && setExpanded(!expanded)}
         disabled={!hasDetail || !isDone}
         className={`
-          flex items-center gap-1.5 w-full text-left
-          px-2 py-1 -mx-1 rounded-md
+          flex items-center gap-[7px] w-full text-left
+          px-[9px] py-[5px] -mx-[5px] rounded-md
           ${hasDetail && isDone
             ? 'cursor-pointer'
             : 'cursor-default'
@@ -79,13 +88,13 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
         />
 
         {/* Label */}
-        <span className={`text-xs font-medium italic ${isDone ? 'text-white/45' : 'text-white/65'}`}>
+        <span className={`text-[15px] font-medium ${isDone ? 'text-white/30' : 'text-white/50'}`}>
           {config.label}
         </span>
 
         {/* Preview inline */}
         {displayPreview && isDone && (
-          <span className="text-[11px] text-white/25 truncate">
+          <span className="text-[14px] text-white/25 truncate italic font-mono">
             {displayPreview}
           </span>
         )}
@@ -95,13 +104,13 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
           <>
             <span className="w-1 h-1 rounded-full animate-pulse flex-shrink-0"
               style={{ backgroundColor: config.color }} aria-hidden="true" />
-            <span className="text-[10.5px] text-white/30 italic">berjalan...</span>
+            <span className="text-[14px] text-white/30 italic">berjalan...</span>
           </>
         )}
 
         {/* Error indicator */}
         {status === 'error' && (
-          <span className="text-[10.5px] text-red-400/70">gagal</span>
+          <span className="text-[14px] text-red-400/70">gagal</span>
         )}
       </button>
 
@@ -115,13 +124,13 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
             transition={{ duration: 0.2, ease: 'easeInOut' }}
             className="overflow-hidden"
           >
-            <div className="ml-3 pl-3 py-2 space-y-2 border-l border-white/[0.06]">
+            <div className="ml-[13px] pl-[13px] py-[9px] space-y-[9px] border-l border-white/[0.06]">
               {args && Object.keys(args).length > 0 && (
                 <div>
-                  <span className="text-[10px] text-white/25 uppercase tracking-wider font-mono">
+                  <span className="text-[12px] text-white/25 uppercase tracking-wider font-mono">
                     Parameters
                   </span>
-                  <pre className="mt-0.5 text-[11px] font-mono text-white/40 bg-black/25 rounded-md p-2 overflow-x-auto max-h-[100px]">
+                  <pre className="mt-[2px] text-[13px] font-mono text-white/40 bg-black/25 rounded-md p-[9px] overflow-x-auto max-h-[110px]">
                     {JSON.stringify(args, null, 2)}
                   </pre>
                 </div>
@@ -129,10 +138,10 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
 
               {preview && (
                 <div>
-                  <span className="text-[10px] text-white/25 uppercase tracking-wider font-mono">
+                  <span className="text-[12px] text-white/25 uppercase tracking-wider font-mono">
                     Output
                   </span>
-                  <pre className="mt-0.5 text-[11px] font-mono text-white/50 bg-black/25 rounded-md p-2 overflow-x-auto max-h-[160px] whitespace-pre-wrap break-all">
+                  <pre className="mt-[2px] text-[13px] font-mono text-white/50 bg-black/25 rounded-md p-[9px] overflow-x-auto max-h-[176px] whitespace-pre-wrap break-all">
                     {preview}
                   </pre>
                 </div>

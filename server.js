@@ -154,7 +154,7 @@ app.get('/api/project', async (req, res) => {
   }
 });
 
-// Memory
+// Memory — full data (session-aware)
 app.get('/api/memory', async (req, res) => {
   try {
     const mem = await memory.getAll(projectPath);
@@ -164,6 +164,49 @@ app.get('/api/memory', async (req, res) => {
   }
 });
 
+// Sessions — list all sessions
+app.get('/api/sessions', async (req, res) => {
+  try {
+    const sessions = await memory.listSessions(projectPath);
+    const activeId = await memory.getActiveSessionId(projectPath);
+    res.json({ sessions, activeId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sessions — create new
+app.post('/api/sessions', async (req, res) => {
+  try {
+    const { title } = req.body || {};
+    const session = await memory.createSession(projectPath, title || 'Chat baru');
+    res.json(session);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sessions — switch active
+app.post('/api/sessions/:id/activate', async (req, res) => {
+  try {
+    const session = await memory.switchSession(projectPath, req.params.id);
+    res.json(session);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Sessions — delete
+app.delete('/api/sessions/:id', async (req, res) => {
+  try {
+    await memory.deleteSession(projectPath, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Memory — reset current session
 app.delete('/api/memory', async (req, res) => {
   try {
     await memory.reset(projectPath);

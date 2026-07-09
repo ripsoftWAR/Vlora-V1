@@ -60,7 +60,7 @@ export default function ToolCallGroup({ toolCalls }: Props) {
 
   return (
     <motion.div
-      className="mb-3"
+      className="mb-[13px]"
       role="region"
       aria-label={`${stats.total} tool dijalankan: ${summaryLabel(stats)}`}
       initial={{ opacity: 0 }}
@@ -73,7 +73,7 @@ export default function ToolCallGroup({ toolCalls }: Props) {
         aria-expanded={expanded}
         aria-label={expanded ? 'Sembunyikan detail tool' : 'Tampilkan detail tool'}
         className={`
-          flex items-center gap-2.5 w-full px-3 py-2 rounded-lg mb-1.5
+          flex items-center gap-[11px] w-full px-[13px] py-[9px] rounded-lg mb-[7px]
           text-left transition-all duration-200
           group/header
           ${hasRunning
@@ -86,7 +86,7 @@ export default function ToolCallGroup({ toolCalls }: Props) {
       >
         {/* Icon */}
         <div className={`
-          w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0
+          w-[30px] h-[30px] rounded-lg flex items-center justify-center flex-shrink-0
           ${hasRunning
             ? 'bg-indigo-500/20'
             : isAllDone
@@ -95,16 +95,16 @@ export default function ToolCallGroup({ toolCalls }: Props) {
           }
         `}>
           {hasRunning ? (
-            <Clock size={13} className="text-indigo-300 animate-pulse" />
+            <Clock size={14} className="text-indigo-300 animate-pulse" />
           ) : (
-            <Wrench size={13} className={isAllDone ? 'text-white/40' : 'text-red-400'} />
+            <Wrench size={14} className={isAllDone ? 'text-white/40' : 'text-red-400'} />
           )}
         </div>
 
         {/* Label + summary */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-white/60">
+            <span className="text-[14px] font-medium text-white/60">
               {stats.total} tool{stats.total > 1 ? 's' : ''} dijalankan
             </span>
             {/* Status dots */}
@@ -120,7 +120,7 @@ export default function ToolCallGroup({ toolCalls }: Props) {
               )}
             </div>
           </div>
-          <span className="text-[10px] text-white/30 font-mono">
+          <span className="text-[13px] text-white/30 font-mono">
             {summaryLabel(stats)}
           </span>
         </div>
@@ -131,7 +131,7 @@ export default function ToolCallGroup({ toolCalls }: Props) {
           transition={{ duration: 0.2 }}
           className="text-white/25 group-hover/header:text-white/40"
         >
-          <ChevronRight size={14} />
+          <ChevronRight size={15} />
         </motion.span>
       </button>
 
@@ -146,7 +146,7 @@ export default function ToolCallGroup({ toolCalls }: Props) {
             className="overflow-hidden"
           >
             <motion.div
-              className="flex flex-col gap-1.5 pl-1"
+              className="flex flex-col gap-[7px] pl-[5px]"
               variants={containerVariants}
               initial="hidden"
               animate="visible"

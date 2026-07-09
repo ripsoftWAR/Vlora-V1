@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { MessageSquare, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 interface Props {
   onSuggestion: (text: string) => void;
@@ -34,32 +34,20 @@ const itemVariants = {
 export default function WelcomeScreen({ onSuggestion }: Props) {
   return (
     <main
-      className="flex-1 flex flex-col items-center justify-center gap-8 p-10 max-w-[460px] mx-auto w-full"
+      className="flex-1 flex flex-col items-center justify-center gap-[35px] p-[44px] max-w-[528px] mx-auto w-full"
       role="banner"
     >
-      {/* Logo */}
-      <motion.div
-        className="relative"
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 20, delay: 0.05 }}
-      >
-        <div className="relative w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
-          <MessageSquare size={22} className="text-white/50" aria-hidden="true" />
-        </div>
-      </motion.div>
-
       {/* Heading */}
       <motion.div
-        className="text-center space-y-3"
+        className="text-center space-y-[13px]"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15, duration: 0.3 }}
+        transition={{ delay: 0.1, duration: 0.3 }}
       >
-        <h1 className="text-[17px] font-medium text-white/85 tracking-tight">
-          Tanya tentang project kamu
+        <h1 className="text-[24px] font-medium text-white/85 tracking-tight">
+          Ada yang perlu saya bantu?
         </h1>
-        <p className="text-[13px] text-white/40 leading-relaxed">
+        <p className="text-[17px] text-white/35 leading-relaxed">
           Agent akan membaca kode, memori, dan skills aktif
           untuk menjawab pertanyaanmu secara realtime.
         </p>
@@ -67,7 +55,7 @@ export default function WelcomeScreen({ onSuggestion }: Props) {
 
       {/* Suggestions — staggered entry */}
       <motion.div
-        className="grid grid-cols-2 gap-2.5 w-full"
+        className="grid grid-cols-2 gap-[11px] w-full"
         role="list"
         aria-label="Contoh pertanyaan"
         variants={containerVariants}
@@ -82,19 +70,19 @@ export default function WelcomeScreen({ onSuggestion }: Props) {
             variants={itemVariants}
             whileHover={{ y: -1 }}
             whileTap={{ scale: 0.98 }}
-            className="group flex items-center gap-2 px-3.5 py-3 rounded-lg
-                       text-left text-[13px] text-white/50
-                       bg-white/[0.03] border border-white/[0.06]
-                       hover:bg-white/[0.05] hover:border-white/[0.10]
-                       hover:text-white/70
+            className="group flex items-center gap-[9px] px-[15px] py-[13px] rounded-lg
+                       text-left text-[15px] text-white/40
+                       bg-white/[0.02] border border-white/[0.04]
+                       hover:bg-white/[0.04] hover:border-white/[0.07]
+                       hover:text-white/55
                        transition-all duration-150
-                       focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+                       focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/15"
           >
             <span className="flex-1 leading-snug">{s}</span>
             <ArrowRight
-              size={13}
+              size={14}
               aria-hidden="true"
-              className="text-white/20 group-hover:text-white/35 group-hover:translate-x-0.5 transition-all"
+              className="text-white/15 group-hover:text-white/25 group-hover:translate-x-0.5 transition-all"
             />
           </motion.button>
         ))}

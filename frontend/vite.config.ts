@@ -6,8 +6,6 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   server: {
-    hmr: {
-      port: 24678, // port terpisah, aman dari SSE/WS backend
-    },
+    hmr: false, // 🔒 Matikan HMR biar tool call edit gak bikin refresh otomatis
   },
 })

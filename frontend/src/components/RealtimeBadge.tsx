@@ -52,57 +52,33 @@ export default function RealtimeBadge({ toolName }: Props) {
       aria-label={isActive ? `Agent sedang: ${config.label}` : 'Agent selesai'}
       className={`
         fixed top-4 left-1/2 -translate-x-1/2 z-50
-        flex items-center gap-3 px-5 py-3
-        rounded-2xl shadow-2xl backdrop-blur-2xl
+        flex items-center gap-[13px] px-[18px] py-[11px]
+        rounded-xl backdrop-blur-2xl
         border transition-all duration-500 ease-out
         ${isActive
-          ? 'opacity-100 translate-y-0 scale-100 border-white/[0.08] bg-black/60'
-          : 'opacity-0 -translate-y-3 scale-97 border-white/[0.04] bg-black/40'
+          ? 'opacity-100 translate-y-0 scale-100 border-white/[0.06] bg-black/70'
+          : 'opacity-0 -translate-y-3 scale-97 border-white/[0.03] bg-black/50'
         }
       `}
     >
-      {/* Pulsing ring */}
+      {/* Simple dot indicator */}
       <div className="relative flex items-center justify-center" aria-hidden="true">
-        {isActive && (
-          <>
-            <div
-              className="absolute w-8 h-8 rounded-full animate-ping opacity-30"
-              style={{ backgroundColor: config.color }}
-            />
-            <div
-              className="absolute w-10 h-10 rounded-full animate-pulse opacity-20"
-              style={{ backgroundColor: config.color }}
-            />
-          </>
-        )}
         <div
-          className="relative w-8 h-8 rounded-xl flex items-center justify-center"
-          style={{
-            background: `linear-gradient(135deg, ${config.color}30, ${config.color}15)`,
-            border: `1px solid ${config.color}40`,
-            boxShadow: isActive ? `0 0 16px ${config.color}50` : 'none',
-          }}
+          className="w-[26px] h-[26px] rounded-lg flex items-center justify-center"
+          style={{ background: `rgba(255,255,255,0.06)` }}
         >
           {isActive ? (
-            <Loader2 size={16} style={{ color: config.color }} className="animate-spin" />
+            <Loader2 size={14} className="animate-spin text-white/40" />
           ) : (
-            <Icon size={16} style={{ color: config.color }} />
+            <Icon size={14} className="text-white/30" />
           )}
         </div>
       </div>
 
       {/* Label */}
-      <div className="flex flex-col">
-        <span className="text-[10px] text-white/30 uppercase tracking-wider">
-          Sedang berjalan
-        </span>
-        <span
-          className="text-[13px] font-medium"
-          style={{ color: config.color }}
-        >
-          {config.label}
-        </span>
-      </div>
+      <span className="text-[14px] text-white/50">
+        {isActive ? config.label : 'Selesai'}
+      </span>
     </div>
   );
 }

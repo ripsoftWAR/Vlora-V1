@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Menu, Loader2 } from 'lucide-react';
+import { Loader2, PanelLeftOpen } from 'lucide-react';
 import ChatMessage from './components/ChatMessage';
 import InputArea from './components/InputArea';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -19,6 +19,13 @@ interface Message {
 }
 interface FileNode { name: string; type: 'file' | 'dir'; children?: FileNode[]; }
 interface ProjectInfo { totalFiles: number; techStack: string[]; skills: string[]; files?: FileNode[]; }
+interface Session {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -62,13 +69,51 @@ export default function App() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [project, setProject] = useState<ProjectInfo>({
     totalFiles: 0, techStack: [], skills: [], files: FALLBACK_FILES,
   });
   const [selectedPath, setSelectedPath] = useState('');
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // ── Load history from backend on mount ─────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        // Load session list
+        const sessRes = await axios.get(`${API_URL}/api/sessions`);
+        setSessions(sessRes.data.sessions || []);
+        setActiveSessionId(sessRes.data.activeId);
+
+        // Load active session messages
+        if (sessRes.data.activeId) {
+          const memRes = await axios.get(`${API_URL}/api/memory`);
+          const mem = memRes.data;
+          if (mem.messages && mem.messages.length > 0) {
+            // Convert backend messages to frontend Message format
+            const restored: Message[] = mem.messages.map((m: any) => ({
+              role: m.role,
+              content: m.content || '',
+              blocks: m.blocks || (m.content ? [{ type: 'text', text: m.content }] : []),
+              timestamp: m.timestamp
+                ? new Date(m.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                : '',
+            }));
+            setMessages(restored);
+          }
+        }
+      } catch {
+        // Backend not ready or no history yet
+      } finally {
+        setHistoryLoaded(true);
+      }
+    })();
+  }, []);
 
   // Scroll to bottom — pakai rAF supaya tidak tabrakan dengan render
   useEffect(() => {
@@ -93,6 +138,21 @@ export default function App() {
       .then((r) => setProject({ ...r.data, files: r.data.files || FALLBACK_FILES }))
       .catch(() => {});
   }, []);
+
+  // ── Refresh session list after each message exchange ─────
+  const prevLoading = useRef(loading);
+  useEffect(() => {
+    // When loading transitions from true → false, refresh sessions
+    if (prevLoading.current && !loading) {
+      axios.get(`${API_URL}/api/sessions`)
+        .then((r) => {
+          setSessions(r.data.sessions || []);
+          setActiveSessionId(r.data.activeId);
+        })
+        .catch(() => {});
+    }
+    prevLoading.current = loading;
+  }, [loading]);
 
   // ── Folder upload ─────────────────────────────────────────
   const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -297,12 +357,62 @@ export default function App() {
     // Kirim ulang query user
     handleSend(lastUserMsg.content);
   }, [messages, handleSend]);
-  const handleNewChat = () => {
-    if (messages.length === 0) return;
-    const confirmed = window.confirm(
-      '⚡ Yakin ingin memulai chat baru? Percakapan saat ini akan hilang.'
-    );
-    if (!confirmed) return;
+  // ── Session management ──────────────────────────────────
+  const handleSwitchSession = async (sessionId: string) => {
+    try {
+      const res = await axios.post(`${API_URL}/api/sessions/${sessionId}/activate`);
+      const sess = res.data;
+      setActiveSessionId(sess.id);
+      // Restore messages
+      const restored: Message[] = (sess.messages || []).map((m: any) => ({
+        role: m.role,
+        content: m.content || '',
+        blocks: m.blocks || (m.content ? [{ type: 'text', text: m.content }] : []),
+        timestamp: m.timestamp
+          ? new Date(m.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          : '',
+      }));
+      setMessages(restored);
+    } catch (err) {
+      console.error('Gagal switch session:', err);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      await axios.delete(`${API_URL}/api/sessions/${sessionId}`);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      if (sessionId === activeSessionId) {
+        // Load new active session or create new
+        const sessRes = await axios.get(`${API_URL}/api/sessions`);
+        setSessions(sessRes.data.sessions || []);
+        if (sessRes.data.activeId) {
+          handleSwitchSession(sessRes.data.activeId);
+        } else {
+          setMessages([]);
+          setActiveSessionId(null);
+        }
+      }
+    } catch (err) {
+      console.error('Gagal hapus session:', err);
+    }
+  };
+  // ── New chat ────────────────────────────────────────────
+  const handleNewChat = async () => {
+    try {
+      const res = await axios.post(`${API_URL}/api/sessions`, { title: 'Chat baru' });
+      const newSession = res.data;
+      setActiveSessionId(newSession.id);
+      setSessions((prev) => [{
+        id: newSession.id,
+        title: newSession.title,
+        createdAt: newSession.createdAt,
+        updatedAt: newSession.updatedAt,
+        messageCount: 0,
+      }, ...prev]);
+    } catch {
+      console.warn('Gagal buat session baru, lanjut offline');
+    }
     setMessages([]);
     setInput('');
     setSidebarOpen(false);
@@ -310,112 +420,119 @@ export default function App() {
 
   return (
     <>
-      {/* Ambient background */}
-      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[20%] -left-[10%] w-[600px] h-[600px] rounded-full
-                      bg-[radial-gradient(circle,rgba(99,102,241,0.12)_0%,transparent_70%)] blur-3xl" />
-        <div className="absolute -bottom-[20%] -right-[10%] w-[700px] h-[700px] rounded-full
-                      bg-[radial-gradient(circle,rgba(59,130,246,0.10)_0%,transparent_70%)] blur-3xl" />
-        <div className="absolute top-[40%] left-[40%] w-[400px] h-[400px] rounded-full
-                      bg-[radial-gradient(circle,rgba(139,92,246,0.06)_0%,transparent_70%)] blur-[80px]" />
-      </div>
-
-      <div className="flex h-screen relative z-[1]">
+      <div className="flex h-screen relative">
         {/* Sidebar */}
         <Sidebar
           open={sidebarOpen}
+          collapsed={sidebarCollapsed}
           onClose={() => setSidebarOpen(false)}
-          project={project}
+          onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
           selectedPath={selectedPath}
           onFolderUpload={handleFolderUpload}
           onNewChat={handleNewChat}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSwitchSession={handleSwitchSession}
+          onDeleteSession={handleDeleteSession}
         />
 
         {/* Main */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          {/* Top bar */}
-          <div className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.05]
-                        bg-white/[0.01] backdrop-blur-xl min-h-[49px]">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Buka sidebar"
-              className="lg:hidden p-1.5 rounded-lg hover:bg-white/[0.06] text-white/30
-                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 focus-visible:rounded-lg"
-            >
-              <Menu size={18} aria-hidden="true" />
-            </button>
-            <span className="text-[12px] font-medium text-white/30">
-              {messages.length === 0 ? 'Sesi baru' : 'Percakapan aktif'}
-            </span>
-            <div className="ml-auto" />
-          </div>
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden items-center relative">
+
+          {/* Floating button — mobile: buka sidebar */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Buka sidebar"
+            className="lg:hidden fixed top-4 left-4 z-30 p-2 rounded-xl
+                       bg-white/[0.04] backdrop-blur-md border border-white/[0.06]
+                       text-white/35 hover:text-white/60 hover:bg-white/[0.08]
+                       transition-all duration-200"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+
+          {/* Floating button — desktop: expand collapsed sidebar */}
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            aria-label="Lebarkan sidebar"
+            className={`hidden lg:flex fixed top-4 left-[68px] z-30 p-2 rounded-xl
+                       bg-white/[0.03] backdrop-blur-md border border-white/[0.04]
+                       text-white/25 hover:text-white/50 hover:bg-white/[0.06]
+                       transition-all duration-300
+                       ${sidebarCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          >
+            <PanelLeftOpen size={16} />
+          </button>
 
           {/* Messages */}
           <div
-            className="flex-1 overflow-y-auto px-5 py-6 flex flex-col gap-6"
+            className="flex-1 overflow-y-auto px-[22px] py-[26px] flex flex-col gap-[26px] items-center w-full max-w-[900px]"
             style={{ overflowAnchor: 'none', scrollBehavior: loading ? 'auto' : 'smooth' }}
           >
-            {messages.length === 0 ? (
-              <WelcomeScreen onSuggestion={handleSend} />
-            ) : (
-              messages.map((msg, i) => (
-                <ChatMessage
-                  key={i}
-                  message={msg}
-                  onRegenerate={i === messages.length - 1 && msg.role === 'assistant' ? handleRegenerate : undefined}
-                  isStreaming={loading && i === messages.length - 1 && msg.role === 'assistant'}
-                />
-              ))
-            )}
+            <div className="w-full flex flex-col gap-6">
+              {messages.length === 0 ? (
+                <WelcomeScreen onSuggestion={handleSend} />
+              ) : (
+                messages.map((msg, i) => (
+                  <ChatMessage
+                    key={i}
+                    message={msg}
+                    onRegenerate={i === messages.length - 1 && msg.role === 'assistant' ? handleRegenerate : undefined}
+                    isStreaming={loading && i === messages.length - 1 && msg.role === 'assistant'}
+                  />
+                ))
+              )}
 
-            {/* Typing indicator — hanya saat agent berpikir (sebelum ada output) */}
-            <AnimatePresence>
-              {loading && (() => {
-                const lastMsg = messages[messages.length - 1];
-                const hasOutput = lastMsg?.role === 'assistant' && lastMsg.blocks && lastMsg.blocks.length > 0;
-                if (hasOutput) return null; // sudah ada output, pakai streaming cursor + tool cards
+              {/* Typing indicator — hanya saat agent berpikir (sebelum ada output) */}
+              <AnimatePresence>
+                {loading && (() => {
+                  const lastMsg = messages[messages.length - 1];
+                  const hasOutput = lastMsg?.role === 'assistant' && lastMsg.blocks && lastMsg.blocks.length > 0;
+                  if (hasOutput) return null; // sudah ada output, pakai streaming cursor + tool cards
 
-                return (
-                  <motion.div
-                    className="flex gap-3 items-start"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08]
-                                  flex items-center justify-center flex-shrink-0">
-                      <Loader2 size={14} className="text-indigo-300 animate-spin" />
-                    </div>
-                    <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-md
-                                  bg-white/[0.04] border border-white/[0.07] backdrop-blur-xl">
-                      <span className="text-[13px] text-white/50">Agent sedang berpikir</span>
-                      <span className="flex gap-1">
-                        {[0, 150, 300].map((d) => (
-                          <span
-                            key={d}
-                            className="w-1 h-1 rounded-full bg-indigo-300/40"
-                            style={{ animation: `dots 1.2s ease-in-out ${d}ms infinite` }}
-                          />
-                        ))}
-                      </span>
-                    </div>
-                  </motion.div>
-                );
-              })()}
-            </AnimatePresence>
+                  return (
+                    <motion.div
+                      className="flex gap-3 items-start"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div className="w-[30px] h-[30px] rounded-full bg-white/[0.04] flex items-center justify-center flex-shrink-0">
+                        <Loader2 size={14} className="text-white/30 animate-spin" />
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-tl-md
+                                    bg-white/[0.02]">
+                        <span className="text-[14px] text-white/30">Agent sedang berpikir</span>
+                        <span className="flex gap-1">
+                          {[0, 150, 300].map((d) => (
+                            <span
+                              key={d}
+                              className="w-1 h-1 rounded-full bg-white/20"
+                              style={{ animation: `dots 1.2s ease-in-out ${d}ms infinite` }}
+                            />
+                          ))}
+                        </span>
+                      </div>
+                    </motion.div>
+                  );
+                })()}
+              </AnimatePresence>
+            </div>
 
             <div ref={bottomRef} />
           </div>
 
           {/* Input */}
-          <InputArea
-            value={input}
-            onChange={setInput}
-            onSend={() => handleSend()}
-            onStop={handleStop}
-            loading={loading}
-          />
+          <div className="w-full max-w-[850px] px-[22px]">
+            <InputArea
+              value={input}
+              onChange={setInput}
+              onSend={() => handleSend()}
+              onStop={handleStop}
+              loading={loading}
+            />
+          </div>
         </main>
       </div>
     </>
