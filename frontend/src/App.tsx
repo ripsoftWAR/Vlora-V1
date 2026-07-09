@@ -6,14 +6,15 @@ import ChatMessage from './components/ChatMessage';
 import InputArea from './components/InputArea';
 import WelcomeScreen from './components/WelcomeScreen';
 import Sidebar from './components/Sidebar';
-import RealtimeBadge from './components/RealtimeBadge';
 
 // ── Types ─────────────────────────────────────────────────────
-interface ToolCall { name: string; status: 'running' | 'done' | 'error'; preview?: string; args?: Record<string, unknown>; }
+type Block =
+  | { type: 'text'; text: string }
+  | { type: 'tool'; name: string; status: 'running' | 'done' | 'error'; preview?: string; args?: Record<string, unknown> };
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  toolCalls?: ToolCall[];
+  blocks?: Block[];
   timestamp: string;
 }
 interface FileNode { name: string; type: 'file' | 'dir'; children?: FileNode[]; }
@@ -60,7 +61,6 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeTool, setActiveTool] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [project, setProject] = useState<ProjectInfo>({
     totalFiles: 0, techStack: [], skills: [], files: FALLBACK_FILES,
@@ -72,8 +72,13 @@ export default function App() {
 
   // Scroll to bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({
+        behavior: loading ? 'auto' : 'smooth',
+        block: 'end',
+      });
+    }
+  }, [messages, loading]);
 
   // Fetch project info on mount
   useEffect(() => {
@@ -120,7 +125,7 @@ export default function App() {
 
     // Add empty assistant message (will be filled via SSE)
     const assistantTs = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    setMessages((p) => [...p, { role: 'assistant', content: '', toolCalls: [], timestamp: assistantTs }]);
+    setMessages((p) => [...p, { role: 'assistant', content: '', blocks: [], timestamp: assistantTs }]);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -168,19 +173,13 @@ export default function App() {
               case 'tool_start': {
                 const toolName: string = payload.name;
                 const toolArgs: Record<string, unknown> | undefined = payload.args;
-                setActiveTool(toolName);
                 setMessages((p) => {
                   const msgs = [...p];
                   const last = msgs[msgs.length - 1];
                   if (last?.role === 'assistant') {
-                    const tcs = [...(last.toolCalls || [])];
-                    const idx = tcs.findIndex(t => t.name === toolName && t.status === 'running');
-                    if (idx >= 0) {
-                      tcs[idx] = { ...tcs[idx], status: 'running', args: toolArgs };
-                    } else {
-                      tcs.push({ name: toolName, status: 'running', preview: '', args: toolArgs });
-                    }
-                    msgs[msgs.length - 1] = { ...last, toolCalls: tcs };
+                    const blocks = [...(last.blocks || [])];
+                    blocks.push({ type: 'tool', name: toolName, status: 'running', args: toolArgs });
+                    msgs[msgs.length - 1] = { ...last, blocks };
                   }
                   return msgs;
                 });
@@ -190,17 +189,19 @@ export default function App() {
               case 'tool_end': {
                 const toolName: string = payload.name;
                 const preview: string = payload.preview || '';
-                setActiveTool(null);
                 setMessages((p) => {
                   const msgs = [...p];
                   const last = msgs[msgs.length - 1];
                   if (last?.role === 'assistant') {
-                    const tcs = (last.toolCalls || []).map(t =>
-                      t.name === toolName && t.status === 'running'
-                        ? { ...t, status: 'done' as const, preview }
-                        : t
-                    );
-                    msgs[msgs.length - 1] = { ...last, toolCalls: tcs };
+                    const blocks = [...(last.blocks || [])];
+                    for (let i = blocks.length - 1; i >= 0; i--) {
+                      const b = blocks[i];
+                      if (b.type === 'tool' && b.name === toolName && b.status === 'running') {
+                        blocks[i] = { ...b, status: 'done' as const, preview };
+                        break;
+                      }
+                    }
+                    msgs[msgs.length - 1] = { ...last, blocks };
                   }
                   return msgs;
                 });
@@ -213,8 +214,14 @@ export default function App() {
                   const msgs = [...p];
                   const last = msgs[msgs.length - 1];
                   if (last?.role === 'assistant') {
-                    // Immutable update — cegah double-append di React Strict Mode
-                    msgs[msgs.length - 1] = { ...last, content: last.content + token };
+                    const blocks = [...(last.blocks || [])];
+                    const lastBlock = blocks[blocks.length - 1];
+                    if (lastBlock?.type === 'text') {
+                      blocks[blocks.length - 1] = { ...lastBlock, text: lastBlock.text + token };
+                    } else {
+                      blocks.push({ type: 'text', text: token });
+                    }
+                    msgs[msgs.length - 1] = { ...last, blocks };
                   }
                   return msgs;
                 });
@@ -229,8 +236,8 @@ export default function App() {
                 setMessages((p) => {
                   const msgs = [...p];
                   const last = msgs[msgs.length - 1];
-                  if (last?.role === 'assistant' && !last.content) {
-                    msgs[msgs.length - 1] = { ...last, content: `⚠️ Error: ${payload.message}` };
+                  if (last?.role === 'assistant' && (!last.blocks || last.blocks.length === 0)) {
+                    msgs[msgs.length - 1] = { ...last, blocks: [{ type: 'text', text: `⚠️ Error: ${payload.message}` }] };
                   }
                   return msgs;
                 });
@@ -254,7 +261,6 @@ export default function App() {
       });
     } finally {
       setLoading(false);
-      setActiveTool(null);
     }
   }, [input, loading]);
 
@@ -307,9 +313,6 @@ export default function App() {
                       bg-[radial-gradient(circle,rgba(139,92,246,0.06)_0%,transparent_70%)] blur-[80px]" />
       </div>
 
-      {/* Realtime badge */}
-      <RealtimeBadge toolName={activeTool} />
-
       <div className="flex h-screen relative z-[1]">
         {/* Sidebar */}
         <Sidebar
@@ -350,45 +353,46 @@ export default function App() {
                   key={i}
                   message={msg}
                   onRegenerate={i === messages.length - 1 && msg.role === 'assistant' ? handleRegenerate : undefined}
+                  isStreaming={loading && i === messages.length - 1 && msg.role === 'assistant'}
                 />
               ))
             )}
 
-            {/* Typing indicator with context */}
+            {/* Typing indicator — hanya saat agent berpikir (sebelum ada output) */}
             <AnimatePresence>
-              {loading && (
-                <motion.div
-                  className="flex gap-3 items-start"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.25 }}
-                >
-                  <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08]
-                                flex items-center justify-center flex-shrink-0">
-                    <Loader2 size={14} className="text-indigo-300 animate-spin" />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    {/* Context label */}
-                    <span className="text-[11.5px] text-indigo-300/60 font-medium tracking-wide">
-                      {activeTool
-                        ? TOOL_META[activeTool]?.label || 'Memproses...'
-                        : 'Agent sedang berpikir...'}
-                    </span>
-                    {/* Dots */}
-                    <div className="flex gap-1.5 px-4 py-2.5 rounded-2xl rounded-tl-md
-                                  bg-white/[0.04] border border-white/[0.07] backdrop-blur-xl">
-                      {[0, 150, 300].map((d) => (
-                        <span
-                          key={d}
-                          className="w-1.5 h-1.5 rounded-full bg-indigo-300/50"
-                          style={{ animation: `dots 1.2s ease-in-out ${d}ms infinite` }}
-                        />
-                      ))}
+              {loading && (() => {
+                const lastMsg = messages[messages.length - 1];
+                const hasOutput = lastMsg?.role === 'assistant' && lastMsg.blocks && lastMsg.blocks.length > 0;
+                if (hasOutput) return null; // sudah ada output, pakai streaming cursor + tool cards
+
+                return (
+                  <motion.div
+                    className="flex gap-3 items-start"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08]
+                                  flex items-center justify-center flex-shrink-0">
+                      <Loader2 size={14} className="text-indigo-300 animate-spin" />
                     </div>
-                  </div>
-                </motion.div>
-              )}
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-2xl rounded-tl-md
+                                  bg-white/[0.04] border border-white/[0.07] backdrop-blur-xl">
+                      <span className="text-[13px] text-white/50">Agent sedang berpikir</span>
+                      <span className="flex gap-1">
+                        {[0, 150, 300].map((d) => (
+                          <span
+                            key={d}
+                            className="w-1 h-1 rounded-full bg-indigo-300/40"
+                            style={{ animation: `dots 1.2s ease-in-out ${d}ms infinite` }}
+                          />
+                        ))}
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })()}
             </AnimatePresence>
 
             <div ref={bottomRef} />

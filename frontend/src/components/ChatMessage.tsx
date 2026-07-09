@@ -3,25 +3,23 @@ import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { User, Bot, Copy, Check, RefreshCw } from 'lucide-react';
-import ToolCallGroup from './ToolCallGroup';
+import ToolCallCard from './ToolCallCard';
 
-interface ToolCall {
-  name: string;
-  status: 'running' | 'done' | 'error';
-  preview?: string;
-  args?: Record<string, unknown>;
-}
+type Block =
+  | { type: 'text'; text: string }
+  | { type: 'tool'; name: string; status: 'running' | 'done' | 'error'; preview?: string; args?: Record<string, unknown> };
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  toolCalls?: ToolCall[];
+  blocks?: Block[];
   timestamp: string;
 }
 
 interface Props {
   message: Message;
   onRegenerate?: () => void;
+  isStreaming?: boolean;
 }
 
 // ── CodeBlock dengan copy button ───────────────────────────────
@@ -84,33 +82,28 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   );
 }
 
-// ── Phase Divider ──────────────────────────────────────────────
-function PhaseDivider({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-3 my-2" role="separator">
-      <div className="flex-1 h-px bg-white/[0.05]" />
-      <span className="text-[10px] font-mono text-white/25 uppercase tracking-widest flex-shrink-0">
-        {label}
-      </span>
-      <div className="flex-1 h-px bg-white/[0.05]" />
-    </div>
-  );
-}
-
 // ── Main Component ────────────────────────────────────────────
-export default function ChatMessage({ message, onRegenerate }: Props) {
+export default function ChatMessage({ message, onRegenerate, isStreaming = false }: Props) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
-  const hasToolCalls = !isUser && message.toolCalls && message.toolCalls.length > 0;
-  const hasContent = message.content.trim().length > 0;
+  const blocks = !isUser ? (message.blocks || []) : [];
+  const hasBlocks = blocks.length > 0;
+
+  // Gabung semua text blocks untuk copy
+  const allText = blocks
+    .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+    .map(b => b.text)
+    .join('');
 
   const handleCopyMessage = useCallback(async () => {
+    const textToCopy = isUser ? message.content : allText;
+    if (!textToCopy) return;
     try {
-      await navigator.clipboard.writeText(message.content);
+      await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* fallback */ }
-  }, [message.content]);
+  }, [isUser, message.content, allText]);
 
   return (
     <motion.div
@@ -126,9 +119,7 @@ export default function ChatMessage({ message, onRegenerate }: Props) {
         mass: 0.8,
       }}
       className={`
-        flex gap-3 items-start max-w-[780px] w-full px-3 py-2.5 rounded-xl
-        hover:bg-white/[0.02] transition-colors duration-150
-        group/msg
+        flex gap-3 items-start max-w-[720px] w-full px-3 py-2.5 rounded-xl
         ${isUser ? 'flex-row-reverse self-end' : 'self-start'}
       `}
     >
@@ -156,56 +147,57 @@ export default function ChatMessage({ message, onRegenerate }: Props) {
 
       {/* Content */}
       <div className="max-w-[calc(100%-44px)] min-w-0 flex-1">
-        {/* Tool calls before bubble */}
-        {hasToolCalls && (
-          <ToolCallGroup toolCalls={message.toolCalls!} />
-        )}
-
-        {/* Phase divider — muncul antara tools dan konten teks */}
-        {hasToolCalls && hasContent && (
-          <PhaseDivider label="Respons" />
-        )}
-
-        {/* Bubble */}
-        {hasContent && (
-          <div
-            className={`
-              relative px-4 py-3 rounded-2xl text-[14.5px] leading-[1.75]
-              ${isUser
-                ? 'bg-white/[0.07] border border-white/[0.10] text-white/90 rounded-[14px_14px_4px_14px]'
-                : 'text-white/80 border-l-2 border-l-indigo-400/25 pl-4'
-              }
-            `}
-          >
-            {isUser ? (
-              <p className="whitespace-pre-wrap">{message.content}</p>
-            ) : (
-              <div className="md-content">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    code({ className, children, ...props }) {
-                      const isInline = !className;
-                      if (isInline) {
-                        return <code className={className} {...props}>{children}</code>;
-                      }
-                      return <CodeBlock className={className}>{children}</CodeBlock>;
-                    },
-                    table({ children }) {
-                      return (
-                        <div className="table-wrapper">
-                          <table>{children}</table>
-                        </div>
-                      );
-                    },
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
-              </div>
-            )}
+        {/* Interleaved blocks — text & tool cards berseling */}
+        {isUser ? (
+          <div className="bg-white/[0.07] border border-white/[0.10] text-white/90 rounded-[14px_14px_4px_14px] px-4 py-2.5 text-[14.5px] leading-[1.75] w-fit max-w-full">
+            <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
-        )}
+        ) : hasBlocks ? (
+          <div className="border-l-2 border-white/[0.06] pl-3 flex flex-col gap-1.5">
+            {blocks.map((block, bi) => {
+              const isLastBlock = bi === blocks.length - 1;
+              const isLastTextBlock = block.type === 'text' && isLastBlock && isStreaming;
+
+              return block.type === 'tool' ? (
+                <ToolCallCard
+                  key={`${block.name}-${bi}`}
+                  name={block.name}
+                  status={block.status}
+                  preview={block.preview}
+                  args={block.args}
+                  step={bi + 1}
+                />
+              ) : (
+                <div
+                  key={bi}
+                  className={`text-white/80 text-[14.5px] leading-[1.75] md-content ${isLastTextBlock ? 'streaming-cursor' : ''}`}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      code({ className, children, ...props }) {
+                        const isInline = !className;
+                        if (isInline) {
+                          return <code className={className} {...props}>{children}</code>;
+                        }
+                        return <CodeBlock className={className}>{children}</CodeBlock>;
+                      },
+                      table({ children }) {
+                        return (
+                          <div className="table-wrapper">
+                            <table>{children}</table>
+                          </div>
+                        );
+                      },
+                    }}
+                  >
+                    {block.text}
+                  </ReactMarkdown>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
 
         {/* Timestamp + Message Actions */}
         <div className={`flex items-center gap-2 mt-1.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -213,14 +205,14 @@ export default function ChatMessage({ message, onRegenerate }: Props) {
             {message.timestamp}
           </p>
 
-          {/* Actions — hover reveal (assistant only) */}
-          {!isUser && hasContent && (
-            <div className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-150">
+          {/* Actions — always visible, ultra subtle */}
+          {!isUser && allText.trim().length > 0 && (
+            <div className="flex items-center gap-0.5">
               {/* Copy */}
               <button
                 onClick={handleCopyMessage}
                 aria-label={copied ? 'Tersalin' : 'Salin pesan'}
-                className="p-1 rounded hover:bg-white/[0.06] text-white/25 hover:text-white/50 transition-colors"
+                className="p-1 rounded hover:bg-white/[0.06] text-white/20 hover:text-white/45 transition-colors"
               >
                 {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
               </button>
@@ -230,7 +222,7 @@ export default function ChatMessage({ message, onRegenerate }: Props) {
                 <button
                   onClick={onRegenerate}
                   aria-label="Regenerasi jawaban"
-                  className="p-1 rounded hover:bg-white/[0.06] text-white/25 hover:text-white/50 transition-colors"
+                  className="p-1 rounded hover:bg-white/[0.06] text-white/20 hover:text-white/45 transition-colors"
                 >
                   <RefreshCw size={12} />
                 </button>

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, Square, CornerDownLeft } from 'lucide-react';
 
@@ -12,7 +12,6 @@ interface Props {
 
 export default function InputArea({ value, onChange, onSend, onStop, loading }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [focused, setFocused] = useState(false);
   const hasText = value.trim().length > 0;
 
   useEffect(() => {
@@ -68,8 +67,6 @@ export default function InputArea({ value, onChange, onSend, onStop, loading }: 
             e.target.style.height = Math.min(e.target.scrollHeight, 130) + 'px';
           }}
           onKeyDown={handleKeyDown}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
           placeholder="Tanya tentang project kamu..."
           aria-label="Ketik pertanyaan tentang project"
           disabled={loading}
