@@ -70,14 +70,21 @@ export default function App() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Scroll to bottom
+  // Scroll to bottom — pakai rAF supaya tidak tabrakan dengan render
   useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({
+    const el = bottomRef.current;
+    if (!el) return;
+
+    // rAF memastikan scroll terjadi SETELAH browser selesai paint,
+    // bukan di tengah-tengah layout animation Framer Motion
+    const rafId = requestAnimationFrame(() => {
+      el.scrollIntoView({
         behavior: loading ? 'auto' : 'smooth',
         block: 'end',
       });
-    }
+    });
+
+    return () => cancelAnimationFrame(rafId);
   }, [messages, loading]);
 
   // Fetch project info on mount
@@ -344,7 +351,10 @@ export default function App() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-5 py-6 flex flex-col gap-6">
+          <div
+            className="flex-1 overflow-y-auto px-5 py-6 flex flex-col gap-6"
+            style={{ overflowAnchor: 'none', scrollBehavior: loading ? 'auto' : 'smooth' }}
+          >
             {messages.length === 0 ? (
               <WelcomeScreen onSuggestion={handleSend} />
             ) : (

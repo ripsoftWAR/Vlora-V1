@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
 import { TOOL_META } from '../App';
 
 interface Props {
@@ -80,7 +79,7 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
         />
 
         {/* Label */}
-        <span className={`text-[11.5px] font-medium ${isDone ? 'text-white/45' : 'text-white/65'}`}>
+        <span className={`text-xs font-medium italic ${isDone ? 'text-white/45' : 'text-white/65'}`}>
           {config.label}
         </span>
 
@@ -103,20 +102,6 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
         {/* Error indicator */}
         {status === 'error' && (
           <span className="text-[10.5px] text-red-400/70">gagal</span>
-        )}
-
-        {/* Spacer */}
-        <span className="flex-1" />
-
-        {/* Expand chevron */}
-        {hasDetail && isDone && (
-          <motion.span
-            animate={{ rotate: expanded ? 180 : 0 }}
-            transition={{ duration: 0.2 }}
-            className="text-white/20 flex-shrink-0"
-          >
-            <ChevronDown size={10} />
-          </motion.span>
         )}
       </button>
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -83,7 +83,7 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
 }
 
 // ── Main Component ────────────────────────────────────────────
-export default function ChatMessage({ message, onRegenerate, isStreaming = false }: Props) {
+const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreaming = false }: Props) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
   const blocks = !isUser ? (message.blocks || []) : [];
@@ -109,19 +109,14 @@ export default function ChatMessage({ message, onRegenerate, isStreaming = false
     <motion.div
       role="article"
       aria-label={isUser ? 'Pesan pengguna' : 'Pesan asisten'}
-      layout
-      initial={{ opacity: 0, y: 16, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{
-        type: 'spring',
-        stiffness: 400,
-        damping: 30,
-        mass: 0.8,
-      }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
       className={`
-        flex gap-3 items-start max-w-[720px] w-full px-3 py-2.5 rounded-xl
-        ${isUser ? 'flex-row-reverse self-end' : 'self-start'}
+        flex gap-3 items-start max-w-[720px] px-3 py-2.5 rounded-xl
+        ${isUser ? 'flex-row-reverse self-end w-fit ml-auto' : 'self-start w-full'}
       `}
+      style={{ willChange: 'auto' }}
     >
       {/* Avatar */}
       <motion.div
@@ -146,7 +141,10 @@ export default function ChatMessage({ message, onRegenerate, isStreaming = false
       </motion.div>
 
       {/* Content */}
-      <div className="max-w-[calc(100%-44px)] min-w-0 flex-1">
+      <div className={`
+        max-w-[calc(100%-44px)] min-w-0
+        ${isUser ? '' : 'flex-1'}
+      `}>
         {/* Interleaved blocks — text & tool cards berseling */}
         {isUser ? (
           <div className="bg-white/[0.07] border border-white/[0.10] text-white/90 rounded-[14px_14px_4px_14px] px-4 py-2.5 text-[14.5px] leading-[1.75] w-fit max-w-full">
@@ -233,4 +231,6 @@ export default function ChatMessage({ message, onRegenerate, isStreaming = false
       </div>
     </motion.div>
   );
-}
+});
+
+export default ChatMessage;
