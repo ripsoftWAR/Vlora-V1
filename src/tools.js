@@ -150,10 +150,45 @@ export function buildTools(scanner) {
         },
       },
       _handler: async ({ command, reason }) => {
-        // Safety: block destructive commands
-        const blocked = ['rm -rf /', 'rm -rf ~', 'mkfs', 'dd if=', 'shutdown', 'reboot', ':(){ :|:& };:'];
-        for (const b of blocked) {
-          if (command.includes(b)) return `❌ Command diblokir karena berbahaya: "${b}"`;
+        // ── Safety: layered protection ────────────────────────────
+        // Layer 1: Blocklist — destructive/irreversible patterns
+        const blocked = [
+          // Filesystem destruction
+          /rm\s+-rf?\s*(\/|\*|~|\.\.?)/i,
+          /rm\s+-r\s+(\/|\*)/i,
+          /sudo\s+rm/i,
+          /:\s*\(\)\s*\{/i,         // fork bomb
+          // Format / overwrite disks
+          /\bmkfs\b/i,
+          /\bdd\s+if=/i,
+          /\bshred\b/i,
+          // System shutdown
+          /\b(shutdown|reboot|halt|poweroff|init\s+[06])\b/i,
+          // Dangerous privilege escalation
+          /\bchmod\s+777\s+(\/|\*)/i,
+          /\bchown\s+-R\s+.*\s+(\/|\*)/i,
+        ];
+        for (const pattern of blocked) {
+          if (pattern.test(command)) {
+            return `❌ Command diblokir keamanan: "${command.slice(0, 80)}"`;
+          }
+        }
+
+        // Layer 2: Allowlist — only known-safe operations
+        const allowed = [
+          /^(npm|npx|yarn|pnpm|bun)\s/,
+          /^(git|gh)\s/,
+          /^(node|tsx|ts-node)\s/,
+          /^(ls|dir|cat|head|tail|wc|find|grep|which)\s/,
+          /^(ps|top|df|du|free)\s/,
+          /^(echo|printf|date|whoami|pwd|env)\s/,
+          /^(curl|wget)\s/,
+          /^(docker|docker-compose)\s/,
+          /^(python3?|pip3?|uv)\s/,
+        ];
+        const isAllowed = allowed.some((p) => p.test(command.trim()));
+        if (!isAllowed) {
+          return `❌ Command tidak diizinkan untuk keamanan: "${command.slice(0, 80)}"\nHanya command development standar yang diizinkan (npm, git, node, ls, cat, docker, dll).`;
         }
 
         try {

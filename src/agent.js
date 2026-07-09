@@ -70,24 +70,58 @@ export class Agent {
     let continueLoop = true;
 
     while (continueLoop) {
-      const response = await this.callAPI({ systemPrompt, messages: this.conversationHistory, tools });
-      const message  = response.choices[0].message;
+      // ── Real streaming via SSE ─────────────────────────────────
+      const stream = this.callAPIStream({ systemPrompt, messages: this.conversationHistory, tools });
 
-      if (message.tool_calls && message.tool_calls.length > 0) {
+      let content = '';
+      const toolCallMap = {};  // index → accumulated tool_call
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices?.[0]?.delta;
+        if (!delta) continue;
+
+        // ── Text token ──────────────────────────────────────────
+        if (delta.content) {
+          content += delta.content;
+          if (onToken) onToken(delta.content);
+        }
+
+        // ── Tool call delta ─────────────────────────────────────
+        if (delta.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const idx = tc.index ?? 0;
+            if (!toolCallMap[idx]) {
+              toolCallMap[idx] = {
+                id: tc.id || '',
+                type: 'function',
+                function: { name: '', arguments: '' },
+              };
+            }
+            const entry = toolCallMap[idx];
+            if (tc.id) entry.id = tc.id;
+            if (tc.function?.name) entry.function.name += tc.function.name;
+            if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+          }
+        }
+      }
+
+      const toolCalls = Object.values(toolCallMap);
+
+      if (toolCalls.length > 0) {
+        // ── Tool call path ──────────────────────────────────────
+        const message = { role: 'assistant', tool_calls: toolCalls };
         this.conversationHistory.push(message);
 
-        for (const tc of message.tool_calls) {
+        for (const tc of toolCalls) {
           const name = tc.function.name;
           let args = {};
           try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /**/ }
 
-          // Emit tool start event
           if (onToolStart) onToolStart(name, args);
 
           const result  = await this.executeTool(name, args, tools);
           const preview = (typeof result === 'string' ? result : JSON.stringify(result)).slice(0, 150);
 
-          // Emit tool end event
           if (onToolEnd) onToolEnd(name, preview);
 
           this.conversationHistory.push({
@@ -98,15 +132,8 @@ export class Agent {
         }
 
       } else {
-        finalText = message.content || '';
-
-        // Streaming simulation word-by-word
-        const words = finalText.split(' ');
-        for (let i = 0; i < words.length; i++) {
-          const token = words[i] + (i < words.length - 1 ? ' ' : '');
-          if (onToken) onToken(token);
-          await sleep(6);
-        }
+        // ── Text response path ─────────────────────────────────
+        finalText = content;
 
         this.conversationHistory.push({ role: 'assistant', content: finalText });
         await this.memory.addMessage(this.projectPath, { role: 'assistant', content: finalText });
@@ -151,8 +178,10 @@ export class Agent {
     return cleaned;
   }
 
-  async callAPI({ systemPrompt, messages, tools }) {
-    // Sanitasi sebelum kirim ke API
+  /**
+   * Non-streaming API call — untuk summarization & internal use
+   */
+  async callAPINonStream({ systemPrompt, messages, tools }) {
     const cleanMessages = this._sanitizeMessages(messages);
 
     const body = {
@@ -173,7 +202,6 @@ export class Agent {
       Authorization: `Bearer ${this.apiKey}`,
     };
 
-    // OpenRouter needs extra headers
     if (this.providerName === 'openrouter') {
       headers['HTTP-Referer'] = 'https://project-analyst-agent';
       headers['X-Title'] = 'Project Analyst Agent';
@@ -191,6 +219,76 @@ export class Agent {
     }
 
     return res.json();
+  }
+
+  /**
+   * Streaming API call — SSE chunk iterator
+   * Yields parsed JSON delta chunks for realtime UI
+   */
+  async *callAPIStream({ systemPrompt, messages, tools }) {
+    const cleanMessages = this._sanitizeMessages(messages);
+
+    const body = {
+      model: this.model,
+      messages: [{ role: 'system', content: systemPrompt }, ...cleanMessages],
+      max_tokens: 8000,
+      temperature: 0.2,
+      stream: true,
+    };
+
+    if (tools && tools.length > 0) {
+      body.tools = tools;
+      body.tool_choice = 'auto';
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.apiKey}`,
+    };
+
+    if (this.providerName === 'openrouter') {
+      headers['HTTP-Referer'] = 'https://project-analyst-agent';
+      headers['X-Title'] = 'Project Analyst Agent';
+    }
+
+    const res = await fetch(`${this.baseURL}/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`${this.providerName.toUpperCase()} API ${res.status}: ${err.slice(0, 300)}`);
+    }
+
+    // ── Parse SSE stream ──────────────────────────────────────────
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') return;
+
+        try {
+          const parsed = JSON.parse(data);
+          yield parsed;
+        } catch {
+          // skip unparseable chunks
+        }
+      }
+    }
   }
 
   async executeTool(name, args, tools) {
@@ -256,7 +354,7 @@ export class Agent {
     if (!toSummarize.length) return;
 
     try {
-      const res = await this.callAPI({
+      const res = await this.callAPINonStream({
         systemPrompt: 'Kamu adalah conversation summarizer.',
         messages: [{
           role: 'user',
@@ -278,5 +376,3 @@ export class Agent {
     }
   }
 }
-
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }

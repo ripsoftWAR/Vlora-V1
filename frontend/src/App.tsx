@@ -9,7 +9,7 @@ import Sidebar from './components/Sidebar';
 import RealtimeBadge from './components/RealtimeBadge';
 
 // ── Types ─────────────────────────────────────────────────────
-interface ToolCall { name: string; status: 'running' | 'done' | 'error'; preview?: string; }
+interface ToolCall { name: string; status: 'running' | 'done' | 'error'; preview?: string; args?: Record<string, unknown>; }
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -167,6 +167,7 @@ export default function App() {
             switch (eventType) {
               case 'tool_start': {
                 const toolName: string = payload.name;
+                const toolArgs: Record<string, unknown> | undefined = payload.args;
                 setActiveTool(toolName);
                 setMessages((p) => {
                   const msgs = [...p];
@@ -175,9 +176,9 @@ export default function App() {
                     const tcs = [...(last.toolCalls || [])];
                     const idx = tcs.findIndex(t => t.name === toolName && t.status === 'running');
                     if (idx >= 0) {
-                      tcs[idx] = { ...tcs[idx], status: 'running' };
+                      tcs[idx] = { ...tcs[idx], status: 'running', args: toolArgs };
                     } else {
-                      tcs.push({ name: toolName, status: 'running', preview: '' });
+                      tcs.push({ name: toolName, status: 'running', preview: '', args: toolArgs });
                     }
                     msgs[msgs.length - 1] = { ...last, toolCalls: tcs };
                   }
@@ -265,7 +266,24 @@ export default function App() {
     }
   }, []);
 
-  // ── New chat (dengan konfirmasi) ──────────────────────────
+  // ── Regenerate last response ──────────────────────────────
+  const handleRegenerate = useCallback(() => {
+    // Cari pesan user terakhir
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (!lastUserMsg) return;
+
+    // Hapus pesan asisten terakhir
+    setMessages((p) => {
+      const lastAssistantIdx = p.map((m, i) => ({ m, i })).reverse().find(({ m }) => m.role === 'assistant')?.i;
+      if (lastAssistantIdx !== undefined) {
+        return p.slice(0, lastAssistantIdx);
+      }
+      return p;
+    });
+
+    // Kirim ulang query user
+    handleSend(lastUserMsg.content);
+  }, [messages, handleSend]);
   const handleNewChat = () => {
     if (messages.length === 0) return;
     const confirmed = window.confirm(
@@ -328,7 +346,11 @@ export default function App() {
               <WelcomeScreen onSuggestion={handleSend} />
             ) : (
               messages.map((msg, i) => (
-                <ChatMessage key={i} message={msg} />
+                <ChatMessage
+                  key={i}
+                  message={msg}
+                  onRegenerate={i === messages.length - 1 && msg.role === 'assistant' ? handleRegenerate : undefined}
+                />
               ))
             )}
 

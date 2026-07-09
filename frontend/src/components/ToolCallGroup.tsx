@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronRight, Wrench, Clock } from 'lucide-react';
 import ToolCallCard from './ToolCallCard';
 
 interface ToolCall {
   name: string;
   status: 'running' | 'done' | 'error';
   preview?: string;
+  args?: Record<string, unknown>;
 }
 
 interface Props {
@@ -17,66 +18,150 @@ const containerVariants = {
   hidden: {},
   visible: {
     transition: {
-      staggerChildren: 0.07,
-      delayChildren: 0.05,
+      staggerChildren: 0.06,
+      delayChildren: 0.04,
     },
   },
 };
 
+/**
+ * Hitung statistik tool calls
+ */
+function useToolStats(toolCalls: ToolCall[]) {
+  return useMemo(() => {
+    const done = toolCalls.filter(t => t.status === 'done').length;
+    const running = toolCalls.filter(t => t.status === 'running').length;
+    const errors = toolCalls.filter(t => t.status === 'error').length;
+    const total = toolCalls.length;
+    return { done, running, errors, total };
+  }, [toolCalls]);
+}
+
+/**
+ * Hasilkan label ringkasan tool calls
+ */
+function summaryLabel(stats: ReturnType<typeof useToolStats>): string {
+  const parts: string[] = [];
+  if (stats.running > 0) parts.push(`${stats.running} berjalan`);
+  if (stats.done > 0) parts.push(`${stats.done} selesai`);
+  if (stats.errors > 0) parts.push(`${stats.errors} gagal`);
+  if (parts.length === 0) parts.push(`${stats.total} tool`);
+  return parts.join(' · ');
+}
+
 export default function ToolCallGroup({ toolCalls }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true); // default terbuka
+  const stats = useToolStats(toolCalls);
+
   if (!toolCalls.length) return null;
 
-  const visible = expanded ? toolCalls : toolCalls.slice(0, 3);
-  const hidden = toolCalls.length - 3;
+  const isAllDone = stats.running === 0 && stats.total > 0;
+  const hasRunning = stats.running > 0;
 
   return (
     <motion.div
-      className="mb-2"
+      className="mb-3"
       role="region"
-      aria-label={`${toolCalls.length} tool dijalankan`}
+      aria-label={`${stats.total} tool dijalankan: ${summaryLabel(stats)}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25 }}
     >
-      {/* Header row */}
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <div className="w-px h-3 bg-indigo-400/40 rounded-full" aria-hidden="true" />
-        <span className="text-xs font-mono text-white/40 tracking-widest uppercase">
-          {toolCalls.length} tool{toolCalls.length > 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {/* Cards — staggered */}
-      <motion.div
-        className="flex flex-wrap gap-2"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
+      {/* ── Header — clickable accordion toggle ──────────── */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+        aria-label={expanded ? 'Sembunyikan detail tool' : 'Tampilkan detail tool'}
+        className={`
+          flex items-center gap-2.5 w-full px-3 py-2 rounded-lg mb-1.5
+          text-left transition-all duration-200
+          group/header
+          ${hasRunning
+            ? 'bg-indigo-500/[0.08] border border-indigo-400/20'
+            : isAllDone
+              ? 'bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.08]'
+              : 'bg-red-500/[0.05] border border-red-500/15'
+          }
+        `}
       >
-        {visible.map((t, i) => (
-          <ToolCallCard key={i} {...t} />
-        ))}
-        {!expanded && hidden > 0 && (
-          <motion.button
-            onClick={() => setExpanded(true)}
-            aria-label={`Tampilkan ${hidden} tool lainnya`}
-            variants={{
-              hidden: { opacity: 0, x: -6 },
-              visible: { opacity: 1, x: 0 },
-            }}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md
-                       text-[11.5px] text-white/35
-                       bg-white/[0.03] border border-white/[0.06]
-                       hover:bg-white/[0.05] hover:text-white/50
-                       transition-colors duration-150
-                       focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+        {/* Icon */}
+        <div className={`
+          w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0
+          ${hasRunning
+            ? 'bg-indigo-500/20'
+            : isAllDone
+              ? 'bg-white/[0.04]'
+              : 'bg-red-500/20'
+          }
+        `}>
+          {hasRunning ? (
+            <Clock size={13} className="text-indigo-300 animate-pulse" />
+          ) : (
+            <Wrench size={13} className={isAllDone ? 'text-white/40' : 'text-red-400'} />
+          )}
+        </div>
+
+        {/* Label + summary */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium text-white/60">
+              {stats.total} tool{stats.total > 1 ? 's' : ''} dijalankan
+            </span>
+            {/* Status dots */}
+            <div className="flex items-center gap-1">
+              {stats.done > 0 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/70" title={`${stats.done} selesai`} />
+              )}
+              {stats.running > 0 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" title={`${stats.running} berjalan`} />
+              )}
+              {stats.errors > 0 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400" title={`${stats.errors} gagal`} />
+              )}
+            </div>
+          </div>
+          <span className="text-[10px] text-white/30 font-mono">
+            {summaryLabel(stats)}
+          </span>
+        </div>
+
+        {/* Chevron */}
+        <motion.span
+          animate={{ rotate: expanded ? 90 : 0 }}
+          transition={{ duration: 0.2 }}
+          className="text-white/25 group-hover/header:text-white/40"
+        >
+          <ChevronRight size={14} />
+        </motion.span>
+      </button>
+
+      {/* ── Expanded cards — vertical numbered list ─────── */}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
           >
-            +{hidden} lagi
-            <ChevronRight size={12} aria-hidden="true" />
-          </motion.button>
+            <motion.div
+              className="flex flex-col gap-1.5 pl-1"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              {toolCalls.map((tc, i) => (
+                <ToolCallCard
+                  key={`${tc.name}-${i}`}
+                  {...tc}
+                  step={i + 1}
+                />
+              ))}
+            </motion.div>
+          </motion.div>
         )}
-      </motion.div>
+      </AnimatePresence>
     </motion.div>
   );
 }
