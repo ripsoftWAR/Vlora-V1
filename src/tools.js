@@ -47,7 +47,9 @@ export function buildTools(scanner) {
         },
       },
       _handler: async ({ file_path, content }) => {
-        const fullPath = path.join(scanner.projectPath, file_path);
+        const fullPath = path.isAbsolute(file_path)
+          ? file_path
+          : path.join(scanner.projectPath, file_path);
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
         await fs.writeFile(fullPath, content, 'utf-8');
         scanner._cache.delete(fullPath); // invalidate cache
@@ -72,7 +74,9 @@ export function buildTools(scanner) {
         },
       },
       _handler: async ({ file_path, old_str, new_str }) => {
-        const fullPath = path.join(scanner.projectPath, file_path);
+        const fullPath = path.isAbsolute(file_path)
+          ? file_path
+          : path.join(scanner.projectPath, file_path);
         if (!existsSync(fullPath)) return `❌ File "${file_path}" tidak ditemukan`;
 
         const original = await fs.readFile(fullPath, 'utf-8');
@@ -121,7 +125,9 @@ export function buildTools(scanner) {
         },
       },
       _handler: async ({ file_path }) => {
-        const fullPath = path.join(scanner.projectPath, file_path);
+        const fullPath = path.isAbsolute(file_path)
+          ? file_path
+          : path.join(scanner.projectPath, file_path);
         if (!existsSync(fullPath)) return `File "${file_path}" tidak ditemukan`;
         await fs.unlink(fullPath);
         return `🗑️ File "${file_path}" dihapus`;

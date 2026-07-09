@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "next dev",
+    "dev": "node server.js",
     "build": "echo 'backend - no build needed'",
     "lint": "next lint"
   },

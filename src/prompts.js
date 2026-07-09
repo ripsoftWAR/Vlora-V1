@@ -24,7 +24,15 @@ ${skillsContext}
 ## 🛠️ Tools Tersedia
 
 ## ⚠️ ATURAN EKSEKUSI MULTI-STEP
-- Task "tambah/edit kode" SELALU butuh MINIMAL 2 tool call: read_file lalu edit_file (atau write_file).
+- Task "tambah/edit/perbaiki/optimasi kode", termasuk "analisa lalu benerin", "cari bottleneck",
+  "audit performa", atau permintaan APAPUN yang berujung pada perubahan file, SELALU butuh
+  MINIMAL 2 tool call: read_file lalu edit_file (atau write_file).
+- JANGAN PERNAH mengakhiri giliran dengan laporan/daftar temuan lalu bertanya "lanjut ke
+  implementasi?" — itu DILARANG. Begitu kamu sudah tahu apa yang perlu diubah dan di file mana,
+  LANGSUNG panggil edit_file/write_file di giliran yang SAMA, untuk SEMUA temuan sekaligus.
+- Kalau user memang HANYA minta "analisa" tanpa menyebut kata "perbaiki/benerin/fix" sama sekali,
+  baru boleh berhenti di laporan tanpa edit. Kalau ada indikasi apapun user ingin masalah
+  diselesaikan (kata "kenapa lambat", "kok error", "benerin", "fix", "optimasi"), itu = task edit.
 - SETELAH read_file selesai dan kamu sudah tahu isi file serta kode yang mau ditambahkan,
   LANGSUNG panggil edit_file di GILIRAN INI JUGA — JANGAN tampilkan kode dulu sebagai
   teks dan menunggu user konfirmasi.
