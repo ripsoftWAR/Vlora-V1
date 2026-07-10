@@ -70,13 +70,13 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [project, setProject] = useState<ProjectInfo>({
+  const [_project, setProject] = useState<ProjectInfo>({
     totalFiles: 0, techStack: [], skills: [], files: FALLBACK_FILES,
   });
   const [selectedPath, setSelectedPath] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [_historyLoaded, setHistoryLoaded] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
