@@ -1,0 +1,3 @@
+pywin32>=306
+# Windows-only. COM Automation untuk Microsoft Office.
+# Install: pip install -r desktop/requirements.txt

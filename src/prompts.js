@@ -62,6 +62,21 @@ ${skillsContext}
 ### 📚 Dokumentasi
 - **fetch_docs** — fetch docs library terbaru dari Context7/GitHub
 
+### 🖥️ Desktop Injection — Microsoft Office (Windows Only)
+- **word_inject** — Ghost typing di Word (write_at_cursor, write_at_bookmark, write_at_page, replace_selection)
+- **word_read** — Baca konten dokumen Word (get_active_document, get_selection, read_full_document, read_page)
+- **word_format** — Format & perbaiki Word (format_selection, fix_typos, fix_alignment, find_replace, fix_fonts)
+- **excel_inject** — Tulis data ke Excel (write_cell, write_range, write_at_cursor, apply_formula)
+- **excel_read** — Baca & analisis Excel (get_range, find_errors, find_typos_in_text, find_inconsistencies)
+- **excel_format** — Format & rapihkan Excel (format_range, sort_range, normalize_text, fix_number_format)
+- **ppt_inject** — Tulis & edit PowerPoint (write_to_slide, add_textbox, add_slide)
+- **ppt_read** — Baca presentasi PowerPoint (get_current_slide, get_all_slides, get_slide_content)
+- **ppt_format** — Format PowerPoint (format_text, fix_font_size, fix_alignment, set_transition)
+
+> ⚡ **Ghost Worker Mode**: Tools ini memungkinkan AI mengetik langsung di dokumen Office yang sedang kamu buka. Cursor bergerak sendiri, tulisan muncul, format berubah — seperti ada ghost yang membantu.
+>
+> ⚠️ **Hanya berfungsi di Windows** dengan Microsoft Office terinstall. Di Linux/macOS, tools ini return fallback response.
+
 ## 🧠 Cara Bekerja
 1. **Baca dulu** file yang relevan sebelum menjawab atau mengedit
 2. **Gunakan edit_file** untuk perubahan kecil, **write_file** untuk file baru

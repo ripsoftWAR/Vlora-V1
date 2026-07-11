@@ -1,0 +1,22 @@
+{
+  "id": "b2965f54",
+  "projectPath": "/home/ghofurdzar/retoflow",
+  "title": "Haloo, sedang diproject apa kita sekarang?",
+  "createdAt": "2026-07-11T12:29:19.395Z",
+  "updatedAt": "2026-07-11T12:29:42.968Z",
+  "summary": null,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Haloo, sedang diproject apa kita sekarang?",
+      "timestamp": "2026-07-11T12:29:19.413Z"
+    },
+    {
+      "role": "assistant",
+      "content": "Halo! 👋\n\nKayaknya kita lagi **di awal yang fresh banget** nih! 🌱\n\nProject **RestoFlow** di `/home/ghofurdzar/retoflow` sudah disiapkan sebagai direktori project, tapi masih **kosong** — belum ada file source code sama sekali.\n\nBerdasarkan skill yang ter-install, project **RestoFlow** ini rencananya adalah:\n> 🍽️ **RestoFlow** — Aplikasi manajemen restoran\n> **Stack:** React 19 + Vite + Express + TypeScript + PostgreSQL + Google Gemini AI\n\nTapi untuk memulai, kita perlu menginisialisasi project-nya dulu. Ada beberapa opsi:\n\n**A. Init dari awal** — `npm create vite@latest`, install dependencies satu per satu\n**B. Clone dari repo yang sudah ada** — kalau sudah punya repo RestoFlow di GitHub\n**C. Kita bikin dari nol bareng-bareng** — mulai dengan struktur yang terencana\n\nMau kita mulai dari mana? Atau mungkin ada repo/codebase yang sudah kamu siapkan dan tinggal di-clone? 😊",
+      "timestamp": "2026-07-11T12:29:42.962Z"
+    }
+  ],
+  "facts": [],
+  "decisions": []
+}

@@ -403,5 +403,440 @@ export function buildTools(scanner) {
       },
     },
 
+    // ═══════════════════════════════════════════════════════════════
+    // 🖥️  DESKTOP TOOLS — Microsoft Office COM Automation
+    // ═══════════════════════════════════════════════════════════════
+    // Tools ini memungkinkan agent mengontrol Word, Excel, dan PowerPoint
+    // langsung di desktop Windows — ghost worker mode.
+    //
+    // Cara kerja: Node.js → spawn Python subprocess → COM → Office App
+    //
+    // ⚠️  HANYA BERFUNGSI DI WINDOWS DENGAN MICROSOFT OFFICE TERINSTALL.
+    //     Di Linux/macOS, tools ini return fallback error "Windows only".
+    // ═══════════════════════════════════════════════════════════════
+
+    // ─── WORD: Inject teks ───────────────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'word_inject',
+        description: 'Tulis teks langsung ke dokumen Word yang sedang aktif (Ghost typing). Bisa ngetik di posisi cursor, di bookmark tertentu, atau di halaman tertentu. Gunakan untuk: menulis konten, mengisi template, mengetik prolog/bab, dll.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['write_at_cursor', 'write_at_bookmark', 'write_at_page', 'write_at_position', 'replace_selection'],
+              description: 'write_at_cursor=ketik di posisi cursor (ghost mode), write_at_bookmark=tulis di bookmark, write_at_page=tulis di halaman tertentu, replace_selection=ganti teks yang sedang dipilih',
+            },
+            text: { type: 'string', description: 'Teks yang akan diketik/ditulis' },
+            typing_speed: { type: 'number', description: 'Kecepatan ghost typing (detik per karakter). 0 = instant, 0.01 = cepat, 0.05 = seperti manusia' },
+            bookmark: { type: 'string', description: 'Nama bookmark (hanya untuk action=write_at_bookmark)' },
+            page: { type: 'number', description: 'Nomor halaman (hanya untuk action=write_at_page)' },
+            press_enter: { type: 'boolean', description: 'Enter di akhir tulisan' },
+          },
+          required: ['action', 'text'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('word', {
+            action: args.action,
+            text: args.text,
+            typing_speed: args.typing_speed || 0,
+            bookmark: args.bookmark || '',
+            page: args.page || 1,
+            press_enter: args.press_enter || false,
+          });
+          if (!result.success) {
+            return `⚠️ Word: ${result.error || 'Gagal'}`;
+          }
+          return `✅ Word: ${result.result?.action || args.action} — ${args.text.slice(0, 100)}...`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') {
+            const os = await import('os');
+            return `🖥️  Word bridge tidak tersedia di ${os.default?.platform?.() || os.platform()}. Fitur ini hanya untuk Windows dengan Microsoft Office.`;
+          }
+          return `⚠️ Word bridge error: ${err.message}`;
+        }
+      },
+    },
+
+    // ─── WORD: Baca dokumen ──────────────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'word_read',
+        description: 'Baca isi dokumen Word yang sedang aktif. Berguna untuk: analisis dokumen, cari konten spesifik, deteksi typo, dll.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['get_active_document', 'get_selection', 'read_full_document', 'read_page', 'get_document_info'],
+              description: 'get_active_document=info dokumen, get_selection=teks yg dipilih, read_full_document=baca semua teks, read_page=baca halaman tertentu',
+            },
+            max_chars: { type: 'number', description: 'Maksimal karakter yang dibaca (default 10000)' },
+            page: { type: 'number', description: 'Nomor halaman (hanya untuk read_page)' },
+            include_text: { type: 'boolean', description: 'Sertakan teks dalam response' },
+          },
+          required: ['action'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('word', {
+            action: args.action,
+            max_chars: args.max_chars || 10000,
+            page: args.page || 1,
+            include_text: args.include_text || false,
+          });
+          if (!result.success) {
+            return `⚠️ Word read: ${result.error}`;
+          }
+          const data = result.result || result;
+          return `📄 Word Document:\n${JSON.stringify(data, null, 2).slice(0, 2000)}`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') {
+            return `🖥️  Word bridge tidak tersedia. Hanya Windows.`;
+          }
+          return `⚠️ Word read error: ${err.message}`;
+        }
+      },
+    },
+
+    // ─── WORD: Format & Perbaikan ────────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'word_format',
+        description: 'Format dan perbaiki dokumen Word. Bisa format selection, alignment, spacing, cari typo, dll. Gunakan untuk: merapihkan paragraf, standardisasi font, perbaiki typo massal.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['format_selection', 'format_paragraph', 'format_document', 'fix_typos', 'fix_alignment', 'fix_spacing', 'fix_fonts', 'find_replace', 'find_replace_all', 'apply_style'],
+              description: 'format_selection=format teks terpilih, fix_typos=perbaiki typo otomatis, fix_alignment=rapihkan alignment, find_replace=cari ganti teks',
+            },
+            // Format params
+            bold: { type: 'boolean' },
+            italic: { type: 'boolean' },
+            font_size: { type: 'number', description: 'Ukuran font' },
+            font_name: { type: 'string', description: 'Nama font (Calibri, Arial, Times New Roman, dll)' },
+            alignment: { type: 'string', enum: ['left', 'center', 'right', 'justify'], description: 'Perataan paragraf' },
+            // Find/Replace params
+            find: { type: 'string', description: 'Teks yang dicari (untuk find_replace)' },
+            replace: { type: 'string', description: 'Teks pengganti (untuk find_replace)' },
+            language: { type: 'string', description: 'Bahasa untuk spell check (default: id)' },
+            style: { type: 'string', description: 'Nama style Word (Normal, Heading 1, dll)' },
+            scope: { type: 'string', enum: ['selection', 'document'], description: 'Scope operasi' },
+          },
+          required: ['action'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('word', {
+            action: args.action,
+            bold: args.bold,
+            italic: args.italic,
+            font_size: args.font_size,
+            font_name: args.font_name,
+            alignment: args.alignment,
+            find: args.find,
+            replace: args.replace,
+            language: args.language || 'id',
+            style: args.style,
+            scope: args.scope || 'selection',
+          });
+          if (!result.success) {
+            return `⚠️ Word format: ${result.error}`;
+          }
+          return `✅ Word format: ${JSON.stringify(result.result || result).slice(0, 500)}`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') {
+            return `🖥️  Word format tidak tersedia. Hanya Windows.`;
+          }
+          return `⚠️ Word format error: ${err.message}`;
+        }
+      },
+    },
+
+    // ─── EXCEL: Inject data ──────────────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'excel_inject',
+        description: 'Tulis data ke Excel. Bisa tulis cell, range, formula, insert row/column. Gunakan untuk: input data massal, terapkan formula, isi template spreadsheet.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['write_cell', 'write_range', 'write_at_cursor', 'apply_formula', 'insert_row', 'insert_column'],
+              description: 'write_cell=tulis satu cell, write_range=tulis range 2D, apply_formula=terapkan formula, insert_row=sisip baris',
+            },
+            cell: { type: 'string', description: 'Referensi cell (A1, B2, dll) — untuk write_cell' },
+            range: { type: 'string', description: 'Range (A1:C10) — untuk write_range, apply_formula' },
+            value: { type: 'string', description: 'Nilai cell — untuk write_cell, write_at_cursor' },
+            data: {
+              type: 'array',
+              items: { type: 'array' },
+              description: 'Data 2D array [[kolom1, kolom2], ...] — untuk write_range',
+            },
+            formula: { type: 'string', description: 'Formula Excel (=SUM(A1:A10)) — untuk apply_formula' },
+          },
+          required: ['action'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('excel', {
+            action: args.action,
+            cell: args.cell || 'A1',
+            range: args.range || 'A1',
+            value: args.value || '',
+            data: args.data || [],
+            formula: args.formula || '',
+          });
+          if (!result.success) return `⚠️ Excel: ${result.error}`;
+          return `✅ Excel: ${JSON.stringify(result.result || result).slice(0, 500)}`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') return `🖥️  Excel bridge: Windows only.`;
+          return `⚠️ Excel error: ${err.message}`;
+        }
+      },
+    },
+
+    // ─── EXCEL: Baca & Analisis ──────────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'excel_read',
+        description: 'Baca data dari Excel. Bisa baca range, cari error, cari duplikat, deteksi inkonsistensi. Gunakan untuk: audit data, cek ribuan baris, cari kesalahan.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['get_active_workbook', 'get_selection', 'get_range', 'get_used_range', 'find_errors', 'find_in_range', 'find_typos_in_text', 'find_inconsistencies', 'highlight_duplicates'],
+              description: 'get_range=baca range, find_errors=cari cell error (#VALUE!, dll), find_typos_in_text=cari potensi typo, find_inconsistencies=cari format campuran',
+            },
+            range: { type: 'string', description: 'Range yang dibaca/dianalisis' },
+            query: { type: 'string', description: 'Teks yang dicari (untuk find_in_range)' },
+            max_rows: { type: 'number', description: 'Maks baris yang dibaca (default: 1000)' },
+          },
+          required: ['action'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('excel', {
+            action: args.action,
+            range: args.range || '',
+            query: args.query || '',
+            max_rows: args.max_rows || 1000,
+          });
+          if (!result.success) return `⚠️ Excel read: ${result.error}`;
+          return `📊 Excel Data:\n${JSON.stringify(result.result || result, null, 2).slice(0, 3000)}`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') return `🖥️  Excel bridge: Windows only.`;
+          return `⚠️ Excel read error: ${err.message}`;
+        }
+      },
+    },
+
+    // ─── EXCEL: Format & Perbaikan ───────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'excel_format',
+        description: 'Format dan perbaiki spreadsheet Excel. Bisa format range, auto-fit, sort, filter, normalize text, fix number format.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['format_range', 'auto_fit_columns', 'auto_fit_rows', 'sort_range', 'filter_range', 'normalize_text', 'fix_number_format', 'merge_cells', 'unmerge_cells', 'clear_range'],
+              description: 'format_range=format cell, sort_range=urutkan, normalize_text=trim/proper/upper/lower, fix_number_format=perbaiki format angka',
+            },
+            range: { type: 'string', description: 'Range yang di-format' },
+            bold: { type: 'boolean' },
+            font_size: { type: 'number' },
+            horizontal_alignment: { type: 'string', enum: ['left', 'center', 'right'] },
+            number_format: { type: 'string', description: 'Format angka ($#,##0.00, #,##0, dll)' },
+            key_column: { type: 'number', description: 'Kolom untuk sort (1-indexed)' },
+            order: { type: 'string', enum: ['asc', 'desc'], description: 'Urutan sort' },
+            mode: { type: 'string', enum: ['trim', 'proper', 'upper', 'lower'], description: 'Mode normalisasi teks' },
+          },
+          required: ['action'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('excel', {
+            action: args.action,
+            range: args.range || '',
+            bold: args.bold,
+            font_size: args.font_size,
+            horizontal_alignment: args.horizontal_alignment,
+            number_format: args.number_format,
+            key_column: args.key_column,
+            order: args.order,
+            mode: args.mode,
+          });
+          if (!result.success) return `⚠️ Excel format: ${result.error}`;
+          return `✅ Excel format: ${JSON.stringify(result.result || result).slice(0, 500)}`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') return `🖥️  Excel format: Windows only.`;
+          return `⚠️ Excel format error: ${err.message}`;
+        }
+      },
+    },
+
+    // ─── POWERPOINT: Inject & Edit ───────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'ppt_inject',
+        description: 'Tulis dan edit slide PowerPoint. Bisa tulis teks, tambah textbox, tambah slide baru, format slide elements. Gunakan untuk: mengisi konten slide, memperbaiki presentasi.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['write_to_slide', 'add_textbox', 'add_slide', 'delete_slide', 'duplicate_slide'],
+              description: 'write_to_slide=tulis ke placeholder/shape, add_textbox=tambah textbox baru, add_slide=tambah slide baru',
+            },
+            text: { type: 'string', description: 'Teks yang ditulis' },
+            placeholder_index: { type: 'number', description: 'Index placeholder (1=judul, 2=subtitle, dll)' },
+            shape_name: { type: 'string', description: 'Nama shape spesifik' },
+            layout: { type: 'string', enum: ['blank', 'title', 'text', 'two_content', 'comparison', 'title_only'], description: 'Layout slide baru' },
+            left: { type: 'number', description: 'Posisi X textbox' },
+            top: { type: 'number', description: 'Posisi Y textbox' },
+            width: { type: 'number', description: 'Lebar textbox' },
+            height: { type: 'number', description: 'Tinggi textbox' },
+            font_size: { type: 'number', description: 'Ukuran font' },
+          },
+          required: ['action'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('powerpoint', {
+            action: args.action,
+            text: args.text || '',
+            placeholder_index: args.placeholder_index,
+            shape_name: args.shape_name || '',
+            layout: args.layout || 'blank',
+            left: args.left || 50,
+            top: args.top || 100,
+            width: args.width || 400,
+            height: args.height || 50,
+            font_size: args.font_size || 18,
+          });
+          if (!result.success) return `⚠️ PPT: ${result.error}`;
+          return `✅ PowerPoint: ${JSON.stringify(result.result || result).slice(0, 500)}`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') return `🖥️  PowerPoint bridge: Windows only.`;
+          return `⚠️ PPT error: ${err.message}`;
+        }
+      },
+    },
+
+    // ─── POWERPOINT: Baca presentasi ─────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'ppt_read',
+        description: 'Baca konten presentasi PowerPoint. Bisa lihat slide aktif, daftar semua slide, baca konten slide tertentu.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['get_active_presentation', 'get_current_slide', 'get_all_slides', 'get_slide_content'],
+              description: 'get_active_presentation=info presentasi, get_current_slide=slide aktif, get_all_slides=daftar semua slide, get_slide_content=baca konten slide',
+            },
+            slide: { type: 'number', description: 'Nomor slide (untuk get_slide_content)' },
+            max_slides: { type: 'number', description: 'Maks slide yang dilist (default 50)' },
+          },
+          required: ['action'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('powerpoint', {
+            action: args.action,
+            slide: args.slide || 1,
+            max_slides: args.max_slides || 50,
+          });
+          if (!result.success) return `⚠️ PPT read: ${result.error}`;
+          return `📊 PowerPoint:\n${JSON.stringify(result.result || result, null, 2).slice(0, 2000)}`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') return `🖥️  PowerPoint bridge: Windows only.`;
+          return `⚠️ PPT read error: ${err.message}`;
+        }
+      },
+    },
+
+    // ─── POWERPOINT: Format presentasi ───────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'ppt_format',
+        description: 'Format slide PowerPoint. Bisa format teks, atur alignment, standardisasi font, atur transisi slide.',
+        parameters: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['format_text', 'change_layout', 'fix_font_size', 'fix_alignment', 'fix_bullet_spacing', 'set_transition'],
+              description: 'format_text=format teks di shape, fix_font_size=standardisasi ukuran font, fix_alignment=rata teks, set_transition=atur transisi slide',
+            },
+            font_size: { type: 'number', description: 'Ukuran font' },
+            font_name: { type: 'string', description: 'Nama font' },
+            alignment: { type: 'string', enum: ['left', 'center', 'right', 'justify'], description: 'Alignment teks' },
+            bold: { type: 'boolean' },
+            layout: { type: 'string', enum: ['blank', 'title', 'text', 'two_content'], description: 'Layout baru' },
+            transition: { type: 'string', enum: ['none', 'fade', 'push', 'wipe', 'zoom'], description: 'Jenis transisi' },
+            duration: { type: 'number', description: 'Durasi transisi (detik)' },
+            shape_name: { type: 'string', description: 'Nama shape yang diformat' },
+          },
+          required: ['action'],
+        },
+      },
+      _handler: async (args) => {
+        try {
+          const { sendCommand } = await import('./desktop.js');
+          const result = await sendCommand('powerpoint', {
+            action: args.action,
+            font_size: args.font_size || 18,
+            font_name: args.font_name || '',
+            alignment: args.alignment || 'left',
+            bold: args.bold,
+            layout: args.layout || 'blank',
+            transition: args.transition || 'fade',
+            duration: args.duration || 1.0,
+            shape_name: args.shape_name || '',
+          });
+          if (!result.success) return `⚠️ PPT format: ${result.error}`;
+          return `✅ PPT format: ${JSON.stringify(result.result || result).slice(0, 500)}`;
+        } catch (err) {
+          if (err.code === 'PLATFORM_NOT_SUPPORTED') return `🖥️  PowerPoint format: Windows only.`;
+          return `⚠️ PPT format error: ${err.message}`;
+        }
+      },
+    },
+
   ];
 }
