@@ -72,39 +72,39 @@ export default function ToolCallGroup({ toolCalls }: Props) {
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
         aria-label={expanded ? 'Sembunyikan detail tool' : 'Tampilkan detail tool'}
-        className={`
-          flex items-center gap-[11px] w-full px-[13px] py-[9px] rounded-lg mb-[7px]
-          text-left transition-all duration-200
-          group/header
-          ${hasRunning
-            ? 'bg-indigo-500/[0.08] border border-indigo-400/20'
-            : isAllDone
-              ? 'bg-white/[0.02] border border-white/[0.05] hover:border-white/[0.08]'
-              : 'bg-red-500/[0.05] border border-red-500/15'
+        className="flex items-center gap-[11px] w-full px-[13px] py-[9px] rounded-lg mb-[7px]
+                   text-left transition-all duration-200 group/header"
+        style={{
+          background: hasRunning ? 'var(--accent-soft)' : isAllDone ? 'var(--bg-secondary)' : 'rgba(239,68,68,0.08)',
+          border: `1px solid ${hasRunning ? 'var(--accent-soft)' : isAllDone ? 'var(--border-subtle)' : 'rgba(239,68,68,0.15)'}`,
+        }}
+        onMouseEnter={(e) => {
+          if (isAllDone) {
+            e.currentTarget.style.borderColor = 'var(--border-default)';
           }
-        `}
+        }}
+        onMouseLeave={(e) => {
+          if (isAllDone) {
+            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+          }
+        }}
       >
         {/* Icon */}
-        <div className={`
-          w-[30px] h-[30px] rounded-lg flex items-center justify-center flex-shrink-0
-          ${hasRunning
-            ? 'bg-indigo-500/20'
-            : isAllDone
-              ? 'bg-white/[0.04]'
-              : 'bg-red-500/20'
-          }
-        `}>
+        <div className="w-[30px] h-[30px] rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{
+            background: hasRunning ? 'var(--accent-soft)' : isAllDone ? 'var(--bg-tertiary)' : 'rgba(239,68,68,0.15)',
+          }}>
           {hasRunning ? (
-            <Clock size={14} className="text-indigo-300 animate-pulse" />
+            <Clock size={14} style={{ color: 'var(--text-secondary)' }} className="animate-pulse" />
           ) : (
-            <Wrench size={14} className={isAllDone ? 'text-white/40' : 'text-red-400'} />
+            <Wrench size={14} style={{ color: isAllDone ? 'var(--text-secondary)' : '#f87171' }} />
           )}
         </div>
 
         {/* Label + summary */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[14px] font-medium text-white/60">
+            <span className="text-[14px] font-medium" style={{ color: 'var(--text-secondary)' }}>
               {stats.total} tool{stats.total > 1 ? 's' : ''} dijalankan
             </span>
             {/* Status dots */}
@@ -113,14 +113,14 @@ export default function ToolCallGroup({ toolCalls }: Props) {
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/70" title={`${stats.done} selesai`} />
               )}
               {stats.running > 0 && (
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" title={`${stats.running} berjalan`} />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/70 animate-pulse" title={`${stats.running} berjalan`} />
               )}
               {stats.errors > 0 && (
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400" title={`${stats.errors} gagal`} />
               )}
             </div>
           </div>
-          <span className="text-[13px] text-white/30 font-mono">
+          <span className="text-[13px] font-mono" style={{ color: 'var(--text-tertiary)' }}>
             {summaryLabel(stats)}
           </span>
         </div>
@@ -129,7 +129,7 @@ export default function ToolCallGroup({ toolCalls }: Props) {
         <motion.span
           animate={{ rotate: expanded ? 90 : 0 }}
           transition={{ duration: 0.2 }}
-          className="text-white/25 group-hover/header:text-white/40"
+          style={{ color: 'var(--text-tertiary)' }}
         >
           <ChevronRight size={15} />
         </motion.span>

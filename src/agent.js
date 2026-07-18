@@ -1,6 +1,7 @@
 import { chalk } from './colors.js';
 import { buildTools } from './tools.js';
 import { buildSystemPrompt } from './prompts.js';
+import { StealthMemory, GhostProfile } from './stealth-memory.js';
 
 // ── Provider configs ────────────────────────────────────────────
 const PROVIDERS = {
@@ -11,7 +12,7 @@ const PROVIDERS = {
   },
   deepseek: {
     baseURL: 'https://api.deepseek.com/v1',
-    defaultModel: 'deepseek-chat',   // DeepSeek V3
+    defaultModel: 'deepseek-v4-flash',   // DeepSeek V4 Flash (lebih cepat)
     envKey: 'DEEPSEEK_API_KEY',
   },
   openrouter: {
@@ -37,6 +38,228 @@ export class Agent {
     this.projectPath = projectPath;
     this.skillManager = skillManager;
     this.conversationHistory = [];
+
+    // 🕵️ Stealth Memory — inisialisasi diam-diam
+    this.stealthMemory = new StealthMemory(projectPath);
+    this._stealthInitialized = false;
+
+    // 👻 Ghost Profile — deteksi device & user otomatis
+    this.ghostProfile = new GhostProfile();
+    this._ghostProfileData = null;
+
+    // 🌐 Global Memory — cache setelah di-load
+    this._globalContext = null;
+  }
+
+  /**
+   * 🌐 Load global memory (lintas project) — dipanggil pas startup
+   */
+  async loadGlobalMemory() {
+    try {
+      this._globalContext = await this.memory.getGlobalContext();
+      // Catat project ini di history
+      const projectInfo = await this.scanner.getContextSummary();
+      await this.memory.recordProject(this.projectPath, projectInfo.techStack);
+      return this._globalContext;
+    } catch {
+      this._globalContext = { userPreferences: [], facts: [], decisions: [], constraints: [], projectHistory: [] };
+      return this._globalContext;
+    }
+  }
+
+  /**
+   * 🔄 Restore percakapan dari session yang tersimpan di disk
+   * Dipanggil pas startup biar agent inget percakapan sebelumnya
+   */
+  async restoreConversation() {
+    try {
+      const session = await this.memory.getOrCreateSession(this.projectPath);
+      if (session && session.messages && session.messages.length > 0) {
+        // Restore messages ke conversationHistory
+        this.conversationHistory = session.messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+        }));
+        console.log(`🔄 Restored ${this.conversationHistory.length} messages from session`);
+      }
+      return this.conversationHistory.length;
+    } catch (err) {
+      console.warn('⚠️ Gagal restore conversation:', err.message);
+      return 0;
+    }
+  }
+
+  /**
+   * 👻 Inisialisasi Ghost Profile — deteksi device & user
+   * Dipanggil otomatis di chatStream pertama kali
+   */
+  async _initGhostProfile() {
+    if (this._ghostProfileData) return this._ghostProfileData;
+
+    try {
+      // 1. Scan device saat ini
+      const currentDevice = await this.ghostProfile.scan();
+
+      // 2. Load profil yang tersimpan
+      let savedProfile = await this.stealthMemory.load('ghost_profile');
+      if (!savedProfile) {
+        savedProfile = {
+          user: {
+            name: currentDevice.username,
+            inferredJob: currentDevice.inferredJob,
+            firstInteraction: new Date().toISOString(),
+            lastInteraction: new Date().toISOString(),
+          },
+          knownDevices: [],
+          preferences: [],
+        };
+      }
+
+      // 3. Cek apakah device ini sudah dikenal
+      const comparison = await this.ghostProfile.compare(savedProfile.knownDevices);
+      
+      if (comparison.isNew) {
+        // Device baru — tambahkan ke daftar
+        savedProfile.knownDevices.push({
+          ...currentDevice,
+          firstSeen: new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+        });
+        
+        // Update inferred job kalau device baru punya clue berbeda
+        if (currentDevice.inferredJob !== 'unknown' && 
+            savedProfile.user.inferredJob === 'unknown') {
+          savedProfile.user.inferredJob = currentDevice.inferredJob;
+        }
+      } else {
+        // Device dikenal — update lastSeen
+        const known = savedProfile.knownDevices.find(d => 
+          d.machineId === currentDevice.machineId || 
+          (d.hostname === currentDevice.hostname && d.username === currentDevice.username)
+        );
+        if (known) {
+          known.lastSeen = new Date().toISOString();
+        }
+        
+        // ✅ Device dikenal — set flag greeting done biar gak sapa lagi
+        // Ini penting: kalau user restart FLORA, device tetap dikenal,
+        // jadi greeting gak perlu muncul lagi
+        try {
+          await this.stealthMemory.save(`greeting_done_${currentDevice.machineId}`, true);
+        } catch {}
+      }
+
+      // 4. Set device saat ini
+      savedProfile.currentDevice = currentDevice;
+      savedProfile.user.lastInteraction = new Date().toISOString();
+
+      // 5. Cek apakah user punya nama panggilan tersimpan
+      const preferredName = await this.stealthMemory.load('user_preferred_name');
+      if (preferredName) {
+        savedProfile.user.name = preferredName;
+      }
+
+      // 6. Simpan kembali
+      await this.stealthMemory.save('ghost_profile', savedProfile);
+      this._ghostProfileData = savedProfile;
+
+      return savedProfile;
+    } catch (err) {
+      console.warn('⚠️ GhostProfile: Gagal inisialisasi:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * 👻 Dapatkan sapaan berdasarkan konteks device
+   * Dipanggil pas pertama kali user chat di device baru
+   * 
+   * ⚠️ PENTING: Greeting cuma muncul SEKALI per device — setelah itu
+   * disimpan flag `greeting_done_<machineId>` di stealth memory.
+   * Jadi kalau user restart FLORA atau cabut flashdisk, greeting
+   * gak muncul lagi.
+   */
+  async _getGreeting() {
+    const profile = await this._initGhostProfile();
+    if (!profile) return '';
+
+    const device = profile.currentDevice;
+    const user = profile.user;
+    const knownDevices = profile.knownDevices;
+
+    // Cek apakah user punya nama panggilan tersimpan
+    const preferredName = await this.stealthMemory.load('user_preferred_name');
+    const displayName = preferredName || user.name || 'Sobat';
+
+    // ── Cek flag greeting udah pernah ditampilkan untuk device ini ──
+    const greetingFlagKey = `greeting_done_${device.machineId}`;
+    const greetingDone = await this.stealthMemory.load(greetingFlagKey);
+    if (greetingDone) {
+      return ''; // Udah pernah disapa di device ini — diam aja
+    }
+
+    // ── Device BARU (belum pernah dikenal sama sekali) ──
+    // Artinya: knownDevices cuma berisi device saat ini (baru ditambahkan)
+    const isBrandNewDevice = knownDevices.length === 1 && 
+      knownDevices[0].machineId === device.machineId &&
+      knownDevices[0].firstSeen === knownDevices[0].lastSeen;
+
+    if (isBrandNewDevice) {
+      let greeting = `👋 Halo, **${displayName}**!`;
+      if (user.inferredJob && user.inferredJob !== 'unknown') {
+        const jobLabels = {
+          developer: 'Developer',
+          designer: 'Desainer',
+          mahasiswa: 'Mahasiswa',
+          akuntan: 'Akuntan/Finance',
+          penulis: 'Penulis',
+          marketing: 'Marketing',
+        };
+        greeting += ` Kayaknya kamu seorang **${jobLabels[user.inferredJob] || user.inferredJob}** ya?`;
+      }
+      // Tandai udah disapa
+      await this.stealthMemory.save(greetingFlagKey, true);
+      return greeting;
+    }
+
+    // ── Device LAMA tapi pindah ke device baru ──
+    // Cari device sebelumnya (bukan device saat ini)
+    const prevDevice = knownDevices.find(d => d.machineId !== device.machineId);
+    if (prevDevice) {
+      let greeting = `👋 Halo lagi, **${displayName}**!`;
+      greeting += ` Baru pertama di **${device.deviceLabel}** ya?`;
+      
+      if (device.inferredJob !== prevDevice.inferredJob && device.inferredJob !== 'unknown') {
+        const jobLabels = {
+          developer: 'Developer',
+          designer: 'Desainer',
+          mahasiswa: 'Mahasiswa',
+          akuntan: 'Akuntan/Finance',
+          penulis: 'Penulis',
+          marketing: 'Marketing',
+        };
+        greeting += ` Kayaknya ini komputer ${jobLabels[device.inferredJob] || device.inferredJob} — beda dari sebelumnya.`;
+      }
+      // Tandai udah disapa
+      await this.stealthMemory.save(greetingFlagKey, true);
+      return greeting;
+    }
+
+    // ── Device yang sudah dikenal — diam aja, gak usah sapa ──
+    // Tandai juga biar aman
+    await this.stealthMemory.save(greetingFlagKey, true);
+    return '';
+  }
+
+  /**
+   * 🔍 Cari memory berdasarkan query — bisa dipanggil dari tool
+   */
+  async searchMemory(query) {
+    const results = await this.memory.searchMemory(query, { maxResults: 5 });
+    const globalResults = await this.memory.searchGlobalPreferences(query);
+    return [...results, ...globalResults];
   }
 
   async chat(userMessage, onChunk) {
@@ -57,33 +280,85 @@ export class Agent {
   async chatStream(userMessage, callbacks = {}) {
     const { onToolStart, onToolEnd, onToken, onDone, onError } = callbacks;
 
+    // 🔄 Restore percakapan dari session disk — biar inget setelah restart
+    if (this.conversationHistory.length === 0) {
+      await this.restoreConversation();
+    }
+
+    // 👻 Ghost Profile — deteksi device & kasih sapaan pas pertama kali
+    if (!this._ghostProfileData) {
+      await this._initGhostProfile();
+      const greeting = await this._getGreeting();
+      if (greeting) {
+        // Kirim greeting sebagai pesan pertama (tidak masuk history)
+        if (onToken) onToken(`\n${greeting}\n\n`);
+      }
+    }
+
     this.conversationHistory.push({ role: 'user', content: userMessage });
     await this.memory.addMessage(this.projectPath, { role: 'user', content: userMessage });
 
     const projectContext = await this.scanner.getContextSummary();
     const memoryContext  = await this.memory.getRecentContext(this.projectPath);
     const skillsContext  = this.skillManager ? await this.skillManager.loadContext() : '';
-    const systemPrompt   = buildSystemPrompt(projectContext, memoryContext, skillsContext);
+
+    // 🌐 Inject global memory (lintas project) — preferensi user dari project lain
+    if (!this._globalContext) {
+      await this.loadGlobalMemory();
+    }
+    const globalContext = this._globalContext || { userPreferences: [], facts: [], decisions: [], constraints: [], projectHistory: [] };
+
+    // 🕵️ Inject stealth memory context (diam-diam, tidak kelihatan di chat)
+    const stealthContext = await this.stealthMemory.getContext();
+    const stealthInjected = stealthContext ? `\n${stealthContext}` : '';
+
+    // Gabung global context ke memoryContext biar diproses di system prompt
+    const enrichedMemoryContext = {
+      ...memoryContext,
+      globalPreferences: globalContext.userPreferences || [],
+      globalFacts: globalContext.facts || [],
+      globalDecisions: globalContext.decisions || [],
+      globalConstraints: globalContext.constraints || [],
+      projectHistory: globalContext.projectHistory || [],
+    };
+
+    const systemPrompt   = buildSystemPrompt(projectContext, enrichedMemoryContext, skillsContext) + stealthInjected;
     const tools          = buildTools(this.scanner);
 
     let finalText = '';
     let continueLoop = true;
+    let loopGuard = 0;
+    const MAX_TOOL_LOOPS = 10; // safety: max 10 tool call rounds
 
     while (continueLoop) {
+      loopGuard++;
+      if (loopGuard > MAX_TOOL_LOOPS) {
+        console.warn('⚠️ Tool call loop exceeded max iterations — breaking');
+        if (onError) onError(new Error('Tool call loop terlalu panjang'));
+        break;
+      }
+
       // ── Real streaming via SSE ─────────────────────────────────
       const stream = this.callAPIStream({ systemPrompt, messages: this.conversationHistory, tools });
 
       let content = '';
       const toolCallMap = {};  // index → accumulated tool_call
+      let streamComplete = false;
 
       for await (const chunk of stream) {
         const delta = chunk.choices?.[0]?.delta;
         if (!delta) continue;
 
         // ── Text token ──────────────────────────────────────────
+        // DeepSeek V4 Flash kirim reasoning_content duluan sebelum content
+        // Kita tangkap reasoning_content sebagai fallback text
         if (delta.content) {
           content += delta.content;
           if (onToken) onToken(delta.content);
+        } else if (delta.reasoning_content) {
+          // DeepSeek reasoning — tampilkan juga biar user lihat proses berpikir
+          content += delta.reasoning_content;
+          if (onToken) onToken(delta.reasoning_content);
         }
 
         // ── Tool call delta ─────────────────────────────────────
@@ -103,8 +378,15 @@ export class Agent {
             if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
           }
         }
+
+        // ── Finish reason ───────────────────────────────────────
+        const finishReason = chunk.choices?.[0]?.finish_reason;
+        if (finishReason === 'stop' || finishReason === 'tool_calls') {
+          streamComplete = true;
+        }
       }
 
+      // ── Fallback: kalau finish_reason gak dikirim, cek toolCalls ──
       const toolCalls = Object.values(toolCallMap);
 
       if (toolCalls.length > 0) {
@@ -117,7 +399,17 @@ export class Agent {
           let args = {};
           try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /**/ }
 
-          if (onToolStart) onToolStart(name, args);
+          // Ambil description dari argumen tool (ditulis agent)
+          const description = args?.description || '';
+
+          // 🔄 TRANSLATE TOOL CALL KE BAHASA MANUSIA
+          // Kalau description kosong atau terlalu teknis, kita generate sendiri
+          let humanDescription = description;
+          if (!humanDescription || humanDescription.length < 5) {
+            humanDescription = this.translateToolCall(name, args);
+          }
+
+          if (onToolStart) onToolStart(name, args, humanDescription);
 
           const result  = await this.executeTool(name, args, tools);
           const preview = (typeof result === 'string' ? result : JSON.stringify(result)).slice(0, 150);
@@ -138,6 +430,12 @@ export class Agent {
         this.conversationHistory.push({ role: 'assistant', content: finalText });
         await this.memory.addMessage(this.projectPath, { role: 'assistant', content: finalText });
 
+        // 🕵️ Auto-extract informasi penting ke stealth memory
+        await this.stealthMemory.autoExtract([
+            { role: 'user', content: userMessage },
+            { role: 'assistant', content: finalText },
+        ]);
+
         if (this.conversationHistory.length > 20) await this._summarizeMemory(systemPrompt);
         continueLoop = false;
       }
@@ -145,6 +443,78 @@ export class Agent {
 
     if (onDone) onDone(finalText);
     return finalText;
+  }
+
+  /**
+   * 🔄 Translate tool call ke bahasa manusia yang natural
+   * Dipakai sebagai fallback kalau agent lupa ngasih description
+   */
+  translateToolCall(name, args) {
+    const translations = {
+      read_file: () => `Membaca file ${args.file_path || '?'}`,
+      write_file: () => `Menulis file ${args.file_path || '?'}`,
+      edit_file: () => `Mengedit file ${args.file_path || '?'}`,
+      delete_file: () => `Menghapus file ${args.file_path || '?'}`,
+      read_multiple_files: () => `Membaca ${(args.file_paths || []).length} file sekaligus`,
+      list_files: () => `Melihat struktur folder project`,
+      find_files: () => `Mencari file dengan pola "${args.pattern || ''}"`,
+      search_in_files: () => `Mencari teks "${args.search_term || ''}" di dalam file`,
+      run_command: () => `Menjalankan: ${(args.command || '').slice(0, 60)}`,
+      detect_tech_stack: () => `Mendeteksi teknologi yang dipakai project`,
+      find_ui_components: () => `Mencari komponen UI${args.filter ? ` dengan filter "${args.filter}"` : ''}`,
+      fetch_docs: () => `Mengambil dokumentasi ${args.library || ''}`,
+      word_inject: () => `Mengetik teks ke Word — ${(args.text || '').slice(0, 50)}`,
+      word_read: () => `Membaca dokumen Word`,
+      word_format: () => `Memformat dokumen Word`,
+      word_exec: () => `Menjalankan kode Python di Word`,
+      excel_inject: () => `Menulis data ke Excel`,
+      excel_read: () => `Membaca data dari Excel`,
+      excel_format: () => `Memformat spreadsheet Excel`,
+      ppt_inject: () => `Mengedit slide PowerPoint`,
+      ppt_read: () => `Membaca presentasi PowerPoint`,
+      ppt_format: () => `Memformat slide PowerPoint`,
+      blender_inject: () => `Memanipulasi model 3D di Blender`,
+      blender_socket_inject: () => `Mengirim perintah ke Blender (live)`,
+      freecad_inject: () => `Memanipulasi model 3D di FreeCAD`,
+      freecad_socket_inject: () => `Mengirim perintah ke FreeCAD (live)`,
+      analyze_image: () => `Menganalisis gambar: ${args.file_path || ''}`,
+    };
+
+    const translator = translations[name];
+    if (translator) return translator();
+
+    // Fallback generik
+    const actionMap = {
+      read: 'Membaca',
+      write: 'Menulis',
+      edit: 'Mengedit',
+      delete: 'Menghapus',
+      create: 'Membuat',
+      get: 'Mendapatkan',
+      find: 'Mencari',
+      search: 'Mencari',
+      list: 'Melihat daftar',
+      run: 'Menjalankan',
+      exec: 'Mengeksekusi',
+      apply: 'Menerapkan',
+      format: 'Memformat',
+      fix: 'Memperbaiki',
+      inject: 'Mengirim data ke',
+      ping: 'Mengecek koneksi',
+      eval: 'Mengevaluasi ekspresi',
+      clear: 'Membersihkan',
+      export: 'Mengekspor',
+      render: 'Merender',
+    };
+
+    for (const [prefix, action] of Object.entries(actionMap)) {
+      if (name.startsWith(prefix)) {
+        const rest = name.replace(prefix, '').replace(/_/g, ' ');
+        return `${action} ${rest.trim()}`;
+      }
+    }
+
+    return `Menjalankan tool ${name.replace(/_/g, ' ')}`;
   }
 
   /**
@@ -234,6 +604,7 @@ export class Agent {
       max_tokens: 8000,
       temperature: 0.2,
       stream: true,
+      stream_options: { include_usage: false },
     };
 
     if (tools && tools.length > 0) {
@@ -272,13 +643,15 @@ export class Agent {
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const data = trimmed.slice(6);
+      // Process complete lines
+      while (buffer.includes('\n')) {
+        const nlIdx = buffer.indexOf('\n');
+        const line = buffer.slice(0, nlIdx).trim();
+        buffer = buffer.slice(nlIdx + 1);
+
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
         if (data === '[DONE]') return;
 
         try {
@@ -286,6 +659,20 @@ export class Agent {
           yield parsed;
         } catch {
           // skip unparseable chunks
+        }
+      }
+    }
+
+    // Process remaining buffer
+    if (buffer.trim()) {
+      const trimmed = buffer.trim();
+      if (trimmed.startsWith('data: ')) {
+        const data = trimmed.slice(6);
+        if (data !== '[DONE]') {
+          try {
+            const parsed = JSON.parse(data);
+            yield parsed;
+          } catch {}
         }
       }
     }
@@ -354,8 +741,9 @@ export class Agent {
     if (!toSummarize.length) return;
 
     try {
+      // ── Ringkasan sesi (short-term) ──────────────────────────
       const res = await this.callAPINonStream({
-        systemPrompt: 'Kamu adalah conversation summarizer.',
+        systemPrompt: 'Kamu adalah conversation summarizer. Ringkas dalam Bahasa Indonesia.',
         messages: [{
           role: 'user',
           content: `Ringkas percakapan berikut (max 200 kata, Bahasa Indonesia):\n\n${
@@ -366,11 +754,38 @@ export class Agent {
       });
 
       const summary = res.choices[0].message.content;
+
+      // ── Long-term summary (lintas sesi) ──────────────────────
+      // Ambil long-term summary yang sudah ada, gabung dengan ringkasan baru
+      const currentContext = await this.memory.getRecentContext(this.projectPath);
+      const existingLongTerm = currentContext.longTermSummary || '';
+
+      let longTermSummary = summary;
+      if (existingLongTerm) {
+        // Gabungkan: ringkasan lama + ringkasan baru (via API lagi)
+        try {
+          const mergeRes = await this.callAPINonStream({
+            systemPrompt: 'Kamu adalah knowledge aggregator. Gabungkan pengetahuan tanpa kehilangan informasi penting.',
+            messages: [{
+              role: 'user',
+              content: `Gabungkan dua ringkasan berikut menjadi satu ringkasan kohesif (max 300 kata, Bahasa Indonesia):\n\nRINGKASAN LAMA:\n${existingLongTerm}\n\nRINGKASAN BARU:\n${summary}`,
+            }],
+            tools: null,
+          });
+          longTermSummary = mergeRes.choices[0].message.content;
+        } catch {
+          // Fallback: pakai ringkasan baru
+          longTermSummary = summary;
+        }
+      }
+
       this.conversationHistory = [
         { role: 'system', content: `[Ringkasan sebelumnya]: ${summary}` },
         ...recent,
       ];
+      
       await this.memory.saveSummary(this.projectPath, summary);
+      await this.memory.saveLongTermSummary(this.projectPath, longTermSummary);
     } catch {
       this.conversationHistory = recent;
     }

@@ -1,12 +1,13 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, existsSync, renameSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, renameSync, mkdirSync, promises as fsPromises } from 'fs';
 import { Agent } from './src/agent.js';
 import { Memory } from './src/memory.js';
 import { ProjectScanner } from './src/scanner.js';
 import { SkillManager } from './src/skills.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import http from 'http';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,27 +53,74 @@ console.log(`🤖 Agent siap! Provider: ${provider.toUpperCase()}`);
 
 // Chat / analyze (SSE streaming — realtime)
 app.post('/api/analyze/stream', async (req, res) => {
-  const { query } = req.body;
-  if (!query) return res.status(400).json({ error: 'Query kosong' });
+  const { query, referencedPaths } = req.body;
+  if (!query && (!referencedPaths || referencedPaths.length === 0)) {
+    return res.status(400).json({ error: 'Query kosong' });
+  }
 
-  console.log(`📩 [SSE] Query: ${query.slice(0, 80)}`);
+  console.log(`📩 [SSE] Query: ${(query || '').slice(0, 80)}`);
+  if (referencedPaths?.length) {
+    console.log(`📎 Referenced paths: ${referencedPaths.join(', ')}`);
+  }
 
-  // SSE headers
+  // SSE headers — PASTIIN gak ada compression/buffering
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no',
+    'Transfer-Encoding': 'chunked',
   });
 
+  // Flush headers immediately
+  res.flushHeaders();
+
   const send = (event, data) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    res.write(msg);
+    // Force flush — critical untuk realtime streaming
+    if (typeof res.flush === 'function') {
+      res.flush();
+    }
   };
 
+  // Kalau ada referencedPaths, baca file-file tersebut dan inject ke query
+  let enrichedQuery = query || '';
+  if (referencedPaths && referencedPaths.length > 0) {
+    const fileContents = [];
+    for (const refPath of referencedPaths) {
+      try {
+        // Coba resolve: kalau path absolut (C:\... atau D:\...), langsung pakai
+        // Kalau relatif, resolve dari projectPath
+        const fullPath = path.isAbsolute(refPath) ? refPath : path.resolve(projectPath, refPath);
+        if (existsSync(fullPath)) {
+          const stat = await fsPromises.stat(fullPath);
+          if (stat.isFile()) {
+            const content = readFileSync(fullPath, 'utf-8').slice(0, 5000);
+            fileContents.push(`📄 ${refPath}:\n\`\`\`\n${content}\n\`\`\``);
+          } else if (stat.isDirectory()) {
+            // Kalau folder, list isinya
+            const entries = await fsPromises.readdir(fullPath, { withFileTypes: true });
+            const listing = entries.map(e => `  ${e.isDirectory() ? '📁' : '📄'} ${e.name}`).join('\n');
+            fileContents.push(`📁 ${refPath}/:\n${listing}`);
+          }
+        } else {
+          fileContents.push(`❌ ${refPath} — tidak ditemukan`);
+        }
+      } catch (err) {
+        fileContents.push(`❌ ${refPath} — error: ${err.message}`);
+      }
+    }
+
+    if (fileContents.length > 0) {
+      enrichedQuery = `[RUJUKAN FILE]\n${fileContents.join('\n\n')}\n\n[PERTANYAAN]\n${query || 'Analisa konten dari file-file yang dirujuk di atas.'}`;
+    }
+  }
+
   try {
-    await agent.chatStream(query, {
-      onToolStart: (name, args) => {
-        send('tool_start', { name, args });
+    await agent.chatStream(enrichedQuery, {
+      onToolStart: (name, args, description) => {
+        send('tool_start', { name, args, description });
       },
       onToolEnd: (name, preview) => {
         send('tool_end', { name, preview });
@@ -89,9 +137,9 @@ app.post('/api/analyze/stream', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Agent SSE error:', err.message);
-    send('error', { message: err.message });
+    try { send('error', { message: err.message }); } catch {}
   } finally {
-    res.end();
+    try { res.end(); } catch {}
   }
 });
 
@@ -106,7 +154,7 @@ app.post('/api/analyze', async (req, res) => {
     let fullText = '';
     const toolCalls = [];
     await agent.chatStream(query, {
-      onToolStart: (name, args) => { toolCalls.push({ name, status: 'running', preview: '' }); },
+      onToolStart: (name, args, description) => { toolCalls.push({ name, status: 'running', preview: '', description }); },
       onToolEnd: (name, preview) => {
         const tc = toolCalls.find(t => t.name === name && t.status === 'running');
         if (tc) { tc.status = 'done'; tc.preview = preview; }
@@ -286,6 +334,11 @@ app.post('/api/upload-folder', upload.array('files'), async (req, res) => {
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// ── Fix: Express 5 listen issue ────────────────────────────────
+// Express 5 punya bug di Windows — app.listen() konek TCP tapi
+// gak pernah kirim response. Solusi: pake http.createServer.
+http.createServer(app).listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Backend Agent JALAN di http://localhost:${PORT}`);
+}).on('error', (err) => {
+  console.error(`❌ Gagal listen di port ${PORT}:`, err.message);
 });

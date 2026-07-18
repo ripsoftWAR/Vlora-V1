@@ -19,6 +19,7 @@ Contoh command via stdin:
 """
 
 import time
+import sys
 import traceback
 from desktop.office_base import OfficeBridge
 

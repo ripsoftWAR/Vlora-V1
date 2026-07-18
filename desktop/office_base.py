@@ -44,12 +44,6 @@ class OfficeBridge:
 
     APP_NAME = None  # Override di subclass
 
-    def __init__(self, debug=False):
-        self.debug = debug
-        self.com = None  # win32com.client module
-        self.app = None  # Aplikasi COM (Word.Application, dll)
-        self._connected = False
-
     # ── Connection ────────────────────────────────────────────────
 
     def connect(self):
@@ -96,18 +90,35 @@ class OfficeBridge:
 
     # ── I/O — komunikasi stdin/stdout ─────────────────────────────
 
+    def __init__(self, debug=False):
+        self.debug = debug
+        self.com = None  # win32com.client module
+        self.app = None  # Aplikasi COM (Word.Application, dll)
+        self._connected = False
+        self._last_cmd_id = ''  # ⬅️ TRACK _cmdId dari command terakhir
+
     def read_command(self) -> dict:
         """Baca satu baris JSON dari stdin."""
         line = sys.stdin.readline().strip()
         if not line:
             return None
         try:
-            return json.loads(line)
+            cmd = json.loads(line)
+            # ⬅️ Simpan _cmdId untuk response nanti
+            self._last_cmd_id = cmd.get('_cmdId', '')
+            return cmd
         except json.JSONDecodeError as e:
             return {"error": f"Invalid JSON: {e}", "raw": line}
 
     def send_response(self, data: dict):
-        """Kirim JSON response ke stdout (satu baris)."""
+        """Kirim JSON response ke stdout (satu baris).
+        
+        ⚠️  WAJIB menyertakan _cmdId dari command yang diproses agar
+            desktop.js bisa mencocokkan response dengan pending command.
+            Tanpa ini → TIMEOUT.
+        """
+        # ⬅️ Sertakan _cmdId di root response
+        data['_cmdId'] = self._last_cmd_id
         response = json.dumps(data, ensure_ascii=False, default=str)
         sys.stdout.write(response + "\n")
         sys.stdout.flush()
@@ -118,7 +129,7 @@ class OfficeBridge:
             "success": False,
             "error": message,
             "details": details,
-            "app": self.APP_NAME
+            "app": self.APP_NAME,
         })
 
     def send_success(self, result: any = None):
@@ -126,7 +137,7 @@ class OfficeBridge:
         self.send_response({
             "success": True,
             "result": result,
-            "app": self.APP_NAME
+            "app": self.APP_NAME,
         })
 
     # ── Main loop ─────────────────────────────────────────────────
@@ -174,7 +185,29 @@ class OfficeBridge:
                     result = self.dispatch(action, cmd)
                     self.send_success(result)
                 except Exception as e:
-                    self.send_error(str(e), traceback.format_exc())
+                    error_msg = str(e)
+                    # Auto-reconnect jika RPC error (koneksi COM stale)
+                    # Ini terjadi saat user tutup & buka ulang Word
+                    if ('RPC' in error_msg or '0x800706BA' in error_msg or
+                        'Server is unavailable' in error_msg or
+                        'COM' in error_msg or 'context' in error_msg.lower()):
+                        self._log(f"RPC Error detected, reconnecting...")
+                        self._connected = False
+                        try:
+                            self.connect()
+                            # Retry dispatch sekali
+                            result = self.dispatch(action, cmd)
+                            self.send_success(result)
+                            self._log("Reconnect & retry succeeded!")
+                            continue
+                        except Exception as e2:
+                            self._log(f"Reconnect failed: {e2}")
+                            self.send_error(
+                                f"RPC error + reconnect failed: {e2}",
+                                traceback.format_exc()
+                            )
+                            continue
+                    self.send_error(error_msg, traceback.format_exc())
 
             except EOFError:
                 break

@@ -28,12 +28,20 @@ const APP_NAMES = {
   word: 'Word',
   excel: 'Excel',
   powerpoint: 'PowerPoint',
+  blender: 'Blender',
+  'blender-socket': 'Blender Socket',
+  freecad: 'FreeCAD',
+  'freecad-socket': 'FreeCAD Socket',
 };
 
 const BRIDGE_MODULES = {
   word: 'desktop.word_bridge',
   excel: 'desktop.excel_bridge',
   powerpoint: 'desktop.powerpoint_bridge',
+  blender: 'desktop.blender_bridge',
+  'blender-socket': 'desktop.blender_socket_bridge',
+  freecad: 'desktop.freecad_bridge',
+  'freecad-socket': 'desktop.freecad_socket_bridge',
 };
 
 const DEFAULT_TIMEOUT = 30000; // 30 detik
@@ -82,7 +90,9 @@ function findPython() {
  * @returns {Promise<object>} bridge handle
  */
 export async function startBridge(app, options = {}) {
-  if (!IS_WINDOWS) {
+  // Blender Socket bisa jalan di semua platform
+  const officeApps = ['word', 'excel', 'powerpoint'];
+  if (!IS_WINDOWS && officeApps.includes(app)) {
     const err = new Error(
       `🖥️  Desktop bridge "${APP_NAMES[app]}" hanya tersedia di Windows.\n` +
       `   Sistem saat ini: ${platform()}\n` +
@@ -242,7 +252,10 @@ export async function sendCommand(app, command, options = {}) {
   const timeout = options.timeout || DEFAULT_TIMEOUT;
 
   // ── Platform check ─────────────────────────────────────────────
-  if (!IS_WINDOWS) {
+  // Blender Socket bisa jalan di semua platform (Blender cross-platform)
+  // Tapi Office (word/excel/powerpoint) hanya Windows
+  const officeApps = ['word', 'excel', 'powerpoint'];
+  if (!IS_WINDOWS && officeApps.includes(app)) {
     return {
       success: false,
       platform: platform(),

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TOOL_META } from '../App';
 
@@ -7,58 +7,33 @@ interface Props {
   status: 'running' | 'done' | 'error';
   preview?: string;
   args?: Record<string, unknown>;
+  description?: string;
   step?: number;
 }
 
-/**
- * Format preview compact — hanya satu baris
- */
-function formatPreview(name: string, raw: string): string {
-  if (!raw) return '';
-
-  if (name === 'read_file' || name === 'read_multiple_files') {
-    const match = raw.match(/^=== (.+?) ===/m);
-    return match ? match[1] : raw.slice(0, 50);
-  }
-
-  if (name === 'write_file' || name === 'edit_file') {
-    // Ekstrak path dari: ✅ Edit berhasil di "frontend/src/..."
-    const quoteMatch = raw.match(/"([^"]+)"/);
-    if (quoteMatch) return quoteMatch[1];
-
-    // Ekstrak path dari: ✅ File berhasil dibuat: frontend/src/...
-    const colonMatch = raw.match(/:\s*(.+)/);
-    if (colonMatch) return colonMatch[1].trim();
-
-    // Fallback: path ada di argumen (write_file selalu punya file_path)
-    if (raw.startsWith('✅')) return 'Berhasil';
-    if (raw.startsWith('❌')) return 'Gagal';
-    return raw.slice(0, 50);
-  }
-
-  if (name === 'run_command') {
-    const lines = raw.split('\n');
-    const firstOutput = lines.find(l => l && !l.startsWith('$ '));
-    return firstOutput ? firstOutput.slice(0, 60) : 'OK';
-  }
-
-  if (name === 'search_in_files' || name === 'find_files') {
-    const count = (raw.match(/📄|•/g) || []).length;
-    return `${count} hasil`;
-  }
-
-  if (name === 'list_files') return 'Struktur project';
-
-  return raw.replace(/\n/g, ' ').slice(0, 60);
-}
-
-export default function ToolCallCard({ name, status, preview, args, step: _step }: Props) {
+export default function ToolCallCard({ name, status, preview, args, description, step: _step }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const startTimeRef = useRef<number>(Date.now());
+  const [elapsed, setElapsed] = useState(0);
   const config = TOOL_META[name] || { icon: '⚙️', label: name, color: '#9ca3af' };
   const isDone = status === 'done';
   const isRunning = status === 'running';
-  const displayPreview = formatPreview(name, preview || '');
   const hasDetail = !!preview || !!args;
+
+  // ── Timer untuk running tool ──────────────────────────────
+  useEffect(() => {
+    if (isRunning) {
+      startTimeRef.current = Date.now();
+      setElapsed(0);
+      const interval = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      }, 200);
+      return () => clearInterval(interval);
+    }
+    if (isDone && startTimeRef.current) {
+      setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+    }
+  }, [isRunning, isDone]);
 
   return (
     <motion.div
@@ -87,25 +62,44 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
           aria-hidden="true"
         />
 
-        {/* Label */}
-        <span className={`text-[15px] font-medium ${isDone ? 'text-white/30' : 'text-white/50'}`}>
+        {/* Label — nama tool */}
+        <span className="text-[15px] font-medium flex-shrink-0"
+          style={{ color: 'var(--text-secondary)' }}>
           {config.label}
         </span>
 
-        {/* Preview inline */}
-        {displayPreview && isDone && (
-          <span className="text-[14px] text-white/25 truncate italic font-mono">
-            {displayPreview}
+        {/* Description — teks natural yang menjelaskan apa yang dilakukan agent */}
+        {description && (
+          <span className="text-[14px] truncate italic"
+            style={{ color: 'var(--text-tertiary)' }}>
+            {description}
           </span>
         )}
 
-        {/* Running pulse */}
+        {/* Fallback preview (kalau description kosong) */}
+        {!description && isDone && preview && (
+          <span className="text-[14px] truncate italic"
+            style={{ color: 'var(--text-tertiary)' }}>
+            {preview.slice(0, 60)}
+          </span>
+        )}
+
+        {/* Running pulse + timer */}
         {isRunning && (
           <>
             <span className="w-1 h-1 rounded-full animate-pulse flex-shrink-0"
               style={{ backgroundColor: config.color }} aria-hidden="true" />
-            <span className="text-[14px] text-white/30 italic">berjalan...</span>
+            {elapsed > 0 && (
+              <span className="text-[12px] font-mono"
+                style={{ color: 'var(--text-tertiary)' }}>{elapsed}s</span>
+            )}
           </>
+        )}
+
+        {/* Durasi setelah selesai */}
+        {isDone && elapsed > 0 && (
+          <span className="text-[12px] font-mono ml-auto"
+            style={{ color: 'var(--text-tertiary)' }}>{elapsed}s</span>
         )}
 
         {/* Error indicator */}
@@ -124,13 +118,16 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
             transition={{ duration: 0.2, ease: 'easeInOut' }}
             className="overflow-hidden"
           >
-            <div className="ml-[13px] pl-[13px] py-[9px] space-y-[9px] border-l border-white/[0.06]">
+            <div className="ml-[13px] pl-[13px] py-[9px] space-y-[9px] border-l"
+                 style={{ borderColor: 'var(--border-subtle)' }}>
               {args && Object.keys(args).length > 0 && (
                 <div>
-                  <span className="text-[12px] text-white/25 uppercase tracking-wider font-mono">
+                  <span className="text-[12px] uppercase tracking-wider font-mono"
+                        style={{ color: 'var(--text-tertiary)' }}>
                     Parameters
                   </span>
-                  <pre className="mt-[2px] text-[13px] font-mono text-white/40 bg-black/25 rounded-md p-[9px] overflow-x-auto max-h-[110px]">
+                  <pre className="mt-[2px] text-[13px] font-mono rounded-md p-[9px] overflow-x-auto max-h-[110px]"
+                       style={{ color: 'var(--text-secondary)', background: 'var(--bg-code-block)' }}>
                     {JSON.stringify(args, null, 2)}
                   </pre>
                 </div>
@@ -138,10 +135,12 @@ export default function ToolCallCard({ name, status, preview, args, step: _step 
 
               {preview && (
                 <div>
-                  <span className="text-[12px] text-white/25 uppercase tracking-wider font-mono">
+                  <span className="text-[12px] uppercase tracking-wider font-mono"
+                        style={{ color: 'var(--text-tertiary)' }}>
                     Output
                   </span>
-                  <pre className="mt-[2px] text-[13px] font-mono text-white/50 bg-black/25 rounded-md p-[9px] overflow-x-auto max-h-[176px] whitespace-pre-wrap break-all">
+                  <pre className="mt-[2px] text-[13px] font-mono rounded-md p-[9px] overflow-x-auto max-h-[176px] whitespace-pre-wrap break-all"
+                       style={{ color: 'var(--text-secondary)', background: 'var(--bg-code-block)' }}>
                     {preview}
                   </pre>
                 </div>

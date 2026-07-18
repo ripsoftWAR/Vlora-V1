@@ -7,7 +7,7 @@ import ToolCallCard from './ToolCallCard';
 
 type Block =
   | { type: 'text'; text: string }
-  | { type: 'tool'; name: string; status: 'running' | 'done' | 'error'; preview?: string; args?: Record<string, unknown> };
+  | { type: 'tool'; name: string; status: 'running' | 'done' | 'error'; preview?: string; args?: Record<string, unknown>; description?: string };
 
 interface Message {
   role: 'user' | 'assistant';
@@ -47,20 +47,26 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
 
   return (
     <div className="relative group/code my-[9px]">
-      <div className="flex items-center justify-between px-[13px] py-[7px]
-                    bg-white/[0.03] border border-white/[0.05] border-b-0
-                    rounded-t-md">
-        <span className="text-[12px] font-mono text-white/30 uppercase tracking-wider">
+      <div className="flex items-center justify-between px-[13px] py-[7px] rounded-t-md"
+        style={{
+          background: 'var(--bg-tertiary)',
+          border: '1px solid var(--border-subtle)',
+          borderBottom: 'none',
+        }}>
+        <span className="text-[12px] font-mono uppercase tracking-wider"
+          style={{ color: 'var(--text-tertiary)' }}>
           {lang || 'code'}
         </span>
         <motion.button
           onClick={handleCopy}
           aria-label={copied ? 'Tersalin' : 'Salin kode'}
           className="flex items-center gap-[7px] px-[9px] py-[2px] rounded
-                     text-[12px] text-white/25 hover:text-white/45
-                     hover:bg-white/[0.04] transition-colors duration-200
+                     text-[12px] transition-colors duration-200
                      focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+          style={{ color: 'var(--text-secondary)' }}
           whileTap={{ scale: 0.92 }}
+          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
         >
           {copied ? (
             <>
@@ -124,18 +130,14 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ type: 'spring', stiffness: 500, damping: 25, delay: 0.08 }}
-        className={`
-          w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0
-          ${isUser
-            ? 'bg-white/[0.10]'
-            : 'bg-white/[0.04]'
-          }
-        `}
+        style={{
+          background: isUser ? 'var(--bg-tertiary)' : 'var(--bg-tertiary)',
+        }}
       >
         {isUser ? (
-          <User size={14} className="text-white/70" aria-hidden="true" />
+          <User size={14} style={{ color: 'var(--text-secondary)' }} aria-hidden="true" />
         ) : (
-          <Bot size={14} className="text-white/50" aria-hidden="true" />
+          <Bot size={14} style={{ color: 'var(--text-secondary)' }} aria-hidden="true" />
         )}
       </motion.div>
 
@@ -146,7 +148,11 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
       `}>
         {/* Interleaved blocks — text & tool cards berseling */}
         {isUser ? (
-          <div className="bg-white/[0.06] text-white/85 rounded-[15px_15px_4px_15px] px-[18px] py-[11px] text-[17px] leading-[1.75] w-fit max-w-full">
+          <div className="rounded-[15px_15px_4px_15px] px-[18px] py-[11px] text-[17px] leading-[1.75] w-fit max-w-full"
+            style={{
+              background: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+            }}>
             <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
         ) : hasBlocks ? (
@@ -162,12 +168,14 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
                   status={block.status}
                   preview={block.preview}
                   args={block.args}
+                  description={block.description}
                   step={bi + 1}
                 />
               ) : (
                 <div
                   key={bi}
-                  className={`text-white/75 text-[17px] leading-[1.78] md-content ${isLastTextBlock ? 'streaming-cursor' : ''}`}
+                  className={`text-[17px] leading-[1.78] md-content ${isLastTextBlock ? 'streaming-cursor' : ''}`}
+                  style={{ color: 'var(--text-primary)' }}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
@@ -198,7 +206,7 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
 
         {/* Timestamp + Message Actions */}
         <div className={`flex items-center gap-[9px] mt-[7px] ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-          <p className="text-[13px] font-mono text-white/25">
+          <p className="text-[13px] font-mono" style={{ color: '#6b6b6b' }}>
             {message.timestamp}
           </p>
 
@@ -209,7 +217,10 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
               <button
                 onClick={handleCopyMessage}
                 aria-label={copied ? 'Tersalin' : 'Salin pesan'}
-                className="p-[5px] rounded hover:bg-white/[0.04] text-white/15 hover:text-white/35 transition-colors"
+                className="p-[5px] rounded transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
               >
                 {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
               </button>
@@ -219,7 +230,10 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
                 <button
                   onClick={onRegenerate}
                   aria-label="Regenerasi jawaban"
-                  className="p-[5px] rounded hover:bg-white/[0.04] text-white/15 hover:text-white/35 transition-colors"
+                  className="p-[5px] rounded transition-colors"
+                  style={{ color: 'var(--text-primary)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
                 >
                   <RefreshCw size={13} />
                 </button>

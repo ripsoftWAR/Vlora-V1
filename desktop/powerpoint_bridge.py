@@ -17,6 +17,7 @@ Contoh command via stdin:
   {"action": "exit"}
 """
 
+import sys
 import traceback
 from desktop.office_base import OfficeBridge
 

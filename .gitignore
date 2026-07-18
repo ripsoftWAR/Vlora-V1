@@ -1,6 +1,19 @@
 
 node_modules
-node_modules
-.env
 .env
 memory/sessions/
+memory/.session-salt
+memory/*.json
+memory/*.enc
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Next.js build
+.next/
+
+# OS files
+Thumbs.db
+.DS_Store

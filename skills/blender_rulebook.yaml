@@ -1,0 +1,415 @@
+# =============================================================================
+# Blender Rulebook — Standar 3D Modelling & Pipeline untuk Flora Agent
+# =============================================================================
+# Versi: 1.0.0
+# Path Output: D:\VloraWorkspace\models\
+#
+# Rulebook ini berisi standar operasional untuk semua proses 3D modelling
+# yang dilakukan Flora menggunakan Blender 5.2.
+# =============================================================================
+
+meta:
+  name: blender_rulebook
+  version: "1.0.0"
+  engine: blender_5.2
+  workspace: "D:\\VloraWorkspace\\models\\"
+  description: "Standar 3D modelling, material, export, dan pipeline untuk semua project 3D Flora"
+
+# =============================================================================
+# 1. STANDAR UMUM — Prinsip Modelling
+# =============================================================================
+
+general:
+  scale_unit: METERS  # Blender unit scale (1 unit = 1 meter)
+  up_axis: Z          # Z-up convention (standard Blender)
+  forward_axis: -Y    # Forward axis
+
+  naming_convention:
+    objects: "{type}_{project}_{variant}"  # Contoh: cube_table_01, chair_modern_v2
+    materials: "mat_{object_name}_{variant}"  # Contoh: mat_cube_table_01_wood
+    collections: "col_{category}_{project}"  # Contoh: col_furniture_kitchen
+    textures: "tex_{material_name}_{map_type}"  # Contoh: tex_mat_wood_albedo
+    blend_file: "{project}_{version}.blend"
+
+  quality_standards:
+    lod0_polygons: "≤ 100,000 triangles (hero asset)"
+    lod1_polygons: "≤ 10,000 triangles (mid-distance)"
+    lod2_polygons: "≤ 1,000 triangles (far / mobile)"
+    uv_checks: 
+      - "No overlapping UV islands"
+      - "UV padding ≥ 4px (untuk 2K texture)"
+      - "Texel density konsisten per asset"
+    topology:
+      - "Mostly quads (≥90%) — hindari n-gons"
+      - "Edge flow mengikuti bentuk objek"
+      - "No loose vertices / floating geometry"
+      - "Normals facing outward (blue in viewport)"
+
+# =============================================================================
+# 2. FORMAT OUTPUT — Export Standards
+# =============================================================================
+
+export:
+  default_format: glb  # GLTF Binary — universal web/ar/VR format
+  formats:
+    obj:
+      extension: ".obj"
+      use_for: "CAD, legacy pipeline, 3D printing"
+      settings:
+        scale: 1.0
+        forward: "-Z"
+        up: "Y"
+        apply_modifiers: true
+        triangulate: true
+        export_materials: true
+        path: "D:\\VloraWorkspace\\models\\obj\\"
+
+    fbx:
+      extension: ".fbx"
+      use_for: "Game engines (Unity, Unreal), animation pipeline"
+      settings:
+        scale: 100.0  # FBX default cm scale
+        apply_scale_options: "FBX_SCALE_UNITS"
+        bake_anim: true
+        mesh_smooth_type: "FACE"
+        path: "D:\\VloraWorkspace\\models\\fbx\\"
+
+    glb:
+      extension: ".glb"
+      use_for: "Web, AR/VR, real-time visualization, portfolio"
+      settings:
+        export_format: "GLB"
+        export_texture_dir: "textures"
+        export_texcoords: true
+        export_normals: true
+        export_materials: true
+        export_animations: true
+        export_skins: true
+        export_image_format: "AUTO"
+        path: "D:\\VloraWorkspace\\models\\glb\\"
+
+    gltf_separate:
+      extension: ".gltf + .bin + textures/"
+      use_for: "Web with external textures, debugging"
+      settings:
+        export_format: "GLTF_SEPARATE"
+        path: "D:\\VloraWorkspace\\models\\gltf\\"
+
+    stl:
+      extension: ".stl"
+      use_for: "3D printing (FDM, SLA, SLS)"
+      settings:
+        use_mesh_modifiers: true
+        use_scene_unit: true
+        forward: "Y"
+        up: "Z"
+        ascii: false  # use binary STL
+        path: "D:\\VloraWorkspace\\models\\stl\\"
+
+    blend:
+      extension: ".blend"
+      use_for: "Archive, collaboration, further editing"
+      settings:
+        compress: true
+        path: "D:\\VloraWorkspace\\models\\blend\\"
+
+# =============================================================================
+# 3. MATERIAL & SHADING
+# =============================================================================
+
+materials:
+  default_workflow: PBR  # Physically Based Rendering
+
+  pbr_channels:
+    albedo:
+      color_space: sRGB
+      bit_depth: 8
+      resolution: "2048x2048 (default), 4096x4096 (hero)"
+    normal:
+      color_space: Non-Color
+      bit_depth: 8
+      format: "OpenGL (Y-up)"  # Blender default
+    roughness:
+      color_space: Non-Color
+      bit_depth: 8
+      range: "0.0 (mirror) - 1.0 (diffuse)"
+    metallic:
+      color_space: Non-Color
+      bit_depth: 8
+      range: "0.0 (dielectric) - 1.0 (metal)"
+    ao:
+      color_space: Non-Color
+      bit_depth: 8
+      description: "Ambient Occlusion — optional but recommended"
+
+  material_types:
+    principled:
+      node: "Principled BSDF"
+      use_for: "99% of materials — universal PBR"
+    emission:
+      node: "Principled BSDF (Emission)"
+      use_for: "Glowing objects, lights, screens"
+    glass:
+      node: "Principled BSDF (Transmission)"
+      use_for: "Glass, water, transparent objects"
+    metallic:
+      node: "Principled BSDF (Metallic)"
+      use_for: "Gold, silver, steel, metal surfaces"
+    hair:
+      node: "Principled Hair BSDF"
+      use_for: "Fur, hair, grass"
+
+  rules:
+    - "Always name materials: mat_{object_name}_{variant}"
+    - "Always use Principled BSDF as base — jangan mix shader tanpa alasan"
+    - "Set Transmission untuk glass/transparent objects"
+    - "Texture size: gunakan power of 2 (512, 1024, 2048, 4096)"
+    - "Hindari Image Texture langsung ke Surface — selalu lewat Principled BSDF"
+    - "Untuk hero asset: minimum 2K texture resolution"
+
+# =============================================================================
+# 4. LIGHTING & ENVIRONMENT
+# =============================================================================
+
+lighting:
+  default_setup: "Three-point lighting (key + fill + rim)"
+
+  light_types:
+    sun:
+      use_for: "Outdoor, main directional light"
+      default_strength: 3.0
+      default_angle: 45
+    point:
+      use_for: "Lampu lokal, ambient accents"
+      default_strength: 100.0
+    area:
+      use_for: "Studio lighting, product renders"
+      default_strength: 200.0
+      default_shape: "RECTANGLE"
+    spot:
+      use_for: "Focused beam, dramatic lighting"
+      default_strength: 50.0
+      default_spot_size: 45
+
+  environment:
+    default_world_color: (0.02, 0.02, 0.02)  # Dark gray
+    use_studio_hdri: true
+    hdri_path: "//assets/hdri/studio.exr"
+    hdri_rotation: 0
+
+  rules:
+    - "Hindari pure white lights (>0.98) — selalu ada sedikit color tint"
+    - "Shadow bias: 0.001 (default) — adjust untuk prevent shadow acne"
+    - "Untuk preview: gunama HDRI studio lighting"
+    - "Untuk showcase: gunakan three-point lighting + rim light"
+
+# =============================================================================
+# 5. MODIFIERS — Stack Standards
+# =============================================================================
+
+modifiers:
+  subdivision_surface:
+    levels_viewport: 1
+    levels_render: 2
+    quality: 3
+    optimal_display: true
+    note: "Jangan pakai Subdiv >3 untuk real-time. Gunakan Normal Map untuk detail."
+
+  bevel:
+    width: 0.01  # 1cm bevel di meter scale
+    segments: 2
+    limit_method: "ANGLE"
+    angle_limit: 30
+    note: "Bevel semua hard edges untuk realistic lighting (no sharp 90°)"
+
+  mirror:
+    use_axis: [true, false, false]  # X-axis mirror by default
+    merge: true
+    merge_threshold: 0.001
+    note: "Gunakan mirror untuk symmetrical objects — hemat 50% kerja"
+
+  solidify:
+    thickness: 0.02  # 2cm default wall thickness
+    offset: -1
+    note: "Apply solidify untuk object 3D printing — pastikan wall thickness ≥ 1mm"
+
+  array:
+    count: 3
+    relative_offset: [1.0, 0.0, 0.0]
+    note: "Gunakan untuk pattern berulang (railing, columns, fence)"
+
+  boolean:
+    operation: "DIFFERENCE"  # or UNION, INTERSECT
+    solver: "FAST"
+    note: "Prefer Boolean solver 'EXACT' untuk precision, 'FAST' untuk preview"
+
+  decimate:
+    ratio: 0.5
+    note: "Gunakan untuk LOD generation — jangan decimate di bawah 10% tanpa retopo"
+
+# =============================================================================
+# 6. RENDERING — Output Settings
+# =============================================================================
+
+rendering:
+  engine: "CYCLES"  # Cycles for final, Eevee for preview
+  samples:
+    preview: 32
+    final_render: 128
+    hero_shot: 512
+
+  resolution:
+    preview: [1280, 720]
+    standard: [1920, 1080]
+    hd: [3840, 2160]  # 4K
+    print: [7680, 4320]  # 8K
+
+  output_format: "PNG"  # PNG for stills, FFMPEG for animation
+  color_depth: "16"     # 16-bit for color accuracy
+  compression: 15       # PNG compression (0-100, 15=default)
+
+  denoising:
+    use_optix: true
+    denoiser: "OPENIMAGEDENOISE"
+    start_sample: 10
+
+  rules:
+    - "Preview render: 32 samples + denoising — cukup untuk visual check"
+    - "Final render: minimum 128 samples untuk clean result"
+    - "Hero shot: 512 samples + denoising + 4K resolution"
+    - "Animasi: output EXR sequence + FFMPEG compression"
+    - "Always check denoising artifacts — kalau muncul, tambah samples"
+
+# =============================================================================
+# 7. PROJECT STRUCTURE — Organization in .blend
+# =============================================================================
+
+scene_organization:
+  collections:
+    - name: "col_geometry"
+      type: "model"
+      description: "Semua mesh object"
+
+    - name: "col_materials"
+      type: "material"
+      description: "Material library"
+
+    - name: "col_lights"
+      type: "light"
+      description: "Semua lampu"
+
+    - name: "col_cameras"
+      type: "camera"
+      description: "Kamera scene"
+
+    - name: "col_rigging"
+      type: "armature"
+      description: "Armature & bones"
+
+    - name: "col_helpers"
+      type: "empty"
+      description: "Empty objects, references, grid"
+
+    - name: "col_hdri"
+      type: "world"
+      description: "HDRI environment"
+
+  viewport:
+    display: "MATERIAL_PREVIEW"  # Default viewport shading
+    wireframe_on_top: false
+    shadow: true
+    cavity: true
+    outline_selected: true
+    overlay:
+      wireframe: false
+      face_orientation: false  # true only when debugging normals
+
+  rules:
+    - "Semua object harus dalam collection — jangan biarkan di root scene"
+    - "Gunakan Collection Instances untuk asset yang di-reuse"
+    - "Beri warna pada collection untuk navigasi cepat"
+    - "Hapus empty collection yang tidak terpakai sebelum export"
+
+# =============================================================================
+# 8. ANIMATION — Standards (Future)
+# =============================================================================
+
+animation:
+  fps: 30
+  frame_range:
+    default: [1, 120]  # 4 detik default
+
+  keyframe_rules:
+    - "Gunakan Auto Keyframing hanya untuk blocking"
+    - "Set keyframe on every transform change — location, rotation, scale"
+    - "Untuk looping animation: frame 1 == frame last (match exactly)"
+
+  rigging:
+    default_bone_shape: "OCTAHEDRAL"
+    display:
+      in_front: true
+      names: true
+      shapes: true
+
+# =============================================================================
+# 9. ERROR HANDLING — Common Issues & Fixes
+# =============================================================================
+
+errors:
+  missing_blender:
+    message: "Blender tidak ditemukan di C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe"
+    fix: "Install Blender 5.2 atau update path BLENDER_EXE di blender_bridge.py"
+
+  timeout:
+    message: "Blender tidak merespon dalam batas waktu"
+    fix: 
+      - "Periksa apakah script mengandung infinite loop"
+      - "Tambah timeout parameter (default: 120 detik)"
+      - "Kurangi kompleksitas geometry"
+
+  script_error:
+    message: "Python error di environment Blender"
+    fix:
+      - "Cek traceback di stderr output"
+      - "Pastikan menggunakan bpy API yang valid untuk Blender 5.2"
+      - "Jangan import library yang tidak tersedia di Blender's Python"
+
+  export_failed:
+    message: "Export model gagal"
+    fix:
+      - "Pastikan ada object di scene"
+      - "Periksa format eksport didukung"
+      - "Cek path workspace: D:\\VloraWorkspace\\models\\"
+
+  no_active_object:
+    message: "Tidak ada object yang aktif/dipilih"
+    fix: "Pastikan bpy.context.active_object tidak None — pilih object dulu"
+
+# =============================================================================
+# 10. FLOATING UI — Tool Configuration (Bot UI Dock)
+# =============================================================================
+
+floating_ui:
+  enabled: true
+  default_theme: "dark"
+  position: "right"
+  dock: true
+  tools:
+    - name: "mesh_palette"
+      icon: "box"
+      description: "Buat mesh primitive cepat"
+      actions:
+        - cube: "Create cube — default size 2m"
+        - sphere: "Create UV sphere — 32 segments"
+        - cylinder: "Create cylinder — 32 vertices"
+        - cone: "Create cone — 32 vertices"
+        - torus: "Create torus — major:1m, minor:0.25m"
+        - monkey: "Suzanne — benchmark object"
+    - name: "material_quick"
+      icon: "palette"
+      description: "Quick material assignment"
+      materials: ["principled", "metallic", "glass", "emission", "glossy"]
+    - name: "export_shortcuts"
+      icon: "export"
+      description: "Quick export buttons"
+      formats: ["glb", "obj", "fbx", "stl", "blend"]

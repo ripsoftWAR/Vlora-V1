@@ -47,6 +47,15 @@ class BridgeManager:
             "description": "Microsoft PowerPoint — presentasi & slide",
             "extensions": [".pptx", ".ppt", ".ppsx"],
         },
+        "blender": {
+            "module": "desktop.blender_bridge",
+            "class": "BlenderBridge",
+            "app_name": "Blender 5.2",
+            "description": "Blender 3D — modelling, material, export",
+            "extensions": [".blend", ".obj", ".fbx", ".glb", ".stl"],
+            "executable": r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe",
+            "workspace": r"D:\VloraWorkspace\models",
+        },
     }
 
     def __init__(self):
@@ -255,7 +264,7 @@ def main():
     )
     parser.add_argument(
         "command",
-        choices=["word", "excel", "powerpoint", "list", "doctor"],
+        choices=["word", "excel", "powerpoint", "blender", "list", "doctor"],
         help="Bridge atau perintah"
     )
     parser.add_argument("--debug", action="store_true", help="Debug mode")

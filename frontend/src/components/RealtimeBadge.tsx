@@ -50,33 +50,33 @@ export default function RealtimeBadge({ toolName }: Props) {
       role="status"
       aria-live="polite"
       aria-label={isActive ? `Agent sedang: ${config.label}` : 'Agent selesai'}
-      className={`
-        fixed top-4 left-1/2 -translate-x-1/2 z-50
-        flex items-center gap-[13px] px-[18px] py-[11px]
-        rounded-xl backdrop-blur-2xl
-        border transition-all duration-500 ease-out
-        ${isActive
-          ? 'opacity-100 translate-y-0 scale-100 border-white/[0.06] bg-black/70'
-          : 'opacity-0 -translate-y-3 scale-97 border-white/[0.03] bg-black/50'
-        }
-      `}
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-50
+                 flex items-center gap-[13px] px-[18px] py-[11px]
+                 rounded-xl backdrop-blur-2xl
+                 border transition-all duration-500 ease-out"
+      style={{
+        opacity: isActive ? 1 : 0,
+        transform: isActive ? 'translateY(0) scale(1)' : 'translateY(-12px) scale(0.97)',
+        borderColor: isActive ? 'var(--border-default)' : 'var(--border-subtle)',
+        background: isActive ? 'var(--bg-card)' : 'var(--bg-secondary)',
+      }}
     >
       {/* Simple dot indicator */}
       <div className="relative flex items-center justify-center" aria-hidden="true">
         <div
           className="w-[26px] h-[26px] rounded-lg flex items-center justify-center"
-          style={{ background: `rgba(255,255,255,0.06)` }}
+          style={{ background: 'var(--bg-tertiary)' }}
         >
           {isActive ? (
-            <Loader2 size={14} className="animate-spin text-white/40" />
+            <Loader2 size={14} className="animate-spin" style={{ color: 'var(--text-primary)' }} />
           ) : (
-            <Icon size={14} className="text-white/30" />
+            <Icon size={14} style={{ color: 'var(--text-primary)' }} />
           )}
         </div>
       </div>
 
       {/* Label */}
-      <span className="text-[14px] text-white/50">
+      <span className="text-[14px]" style={{ color: 'var(--text-primary)' }}>
         {isActive ? config.label : 'Selesai'}
       </span>
     </div>

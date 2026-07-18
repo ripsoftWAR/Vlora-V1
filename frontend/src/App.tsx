@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Loader2, PanelLeftOpen } from 'lucide-react';
+import { Loader2, PanelLeftOpen, FolderOpen, Sun, Moon } from 'lucide-react';
 import ChatMessage from './components/ChatMessage';
 import InputArea from './components/InputArea';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -10,7 +10,7 @@ import Sidebar from './components/Sidebar';
 // ── Types ─────────────────────────────────────────────────────
 type Block =
   | { type: 'text'; text: string }
-  | { type: 'tool'; name: string; status: 'running' | 'done' | 'error'; preview?: string; args?: Record<string, unknown> };
+  | { type: 'tool'; name: string; status: 'running' | 'done' | 'error'; preview?: string; args?: Record<string, unknown>; description?: string };
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -73,13 +73,35 @@ export default function App() {
   const [_project, setProject] = useState<ProjectInfo>({
     totalFiles: 0, techStack: [], skills: [], files: FALLBACK_FILES,
   });
-  const [selectedPath, setSelectedPath] = useState('');
+  const [_selectedPath] = useState('');
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [_historyLoaded, setHistoryLoaded] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const browseInputRef = useRef<HTMLInputElement>(null);
+  const [browsePath, setBrowsePath] = useState<string>('');
+
+  // ── Theme ─────────────────────────────────────────────────
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('flora-theme');
+    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+  });
+
+  // Sync theme ke <html> data-theme
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('flora-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  }, []);
+
+  // ── Browse state ──────────────────────────────────────────
+  // Multi-path: array of chips, masing-masing bisa loading sendiri
+  const [browseChips, setBrowseChips] = useState<{ path: string; loading?: boolean }[]>([]);
 
   // ── Load history from backend on mount ─────────────────────
   useEffect(() => {
@@ -115,22 +137,65 @@ export default function App() {
     })();
   }, []);
 
-  // Scroll to bottom — pakai rAF supaya tidak tabrakan dengan render
+  // ── Scroll management ────────────────────────────────────
+  // Rekam apakah user sengaja scroll ke atas (menolak auto-scroll)
+  const userScrolledUpRef = useRef(false);
+
+  // Deteksi scroll manual oleh user
   useEffect(() => {
+    const container = bottomRef.current?.parentElement;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      // Kalau user scroll ke atas melebihi threshold, tandai sebagai "menyerah"
+      if (distanceFromBottom > 150) {
+        userScrolledUpRef.current = true;
+      } else {
+        userScrolledUpRef.current = false;
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Scroll ke bawah — menyerah kalau user sudah scroll ke atas
+  const scrollToBottom = useCallback(() => {
     const el = bottomRef.current;
     if (!el) return;
 
-    // rAF memastikan scroll terjadi SETELAH browser selesai paint,
-    // bukan di tengah-tengah layout animation Framer Motion
-    const rafId = requestAnimationFrame(() => {
-      el.scrollIntoView({
-        behavior: loading ? 'auto' : 'smooth',
-        block: 'end',
-      });
-    });
+    // Kalau user sengaja scroll ke atas, MENYERAH — jangan maksa
+    if (userScrolledUpRef.current) return;
 
-    return () => cancelAnimationFrame(rafId);
-  }, [messages, loading]);
+    const container = el.parentElement;
+    if (!container) return;
+
+    requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+  }, []);
+
+  // Auto-scroll saat ada token baru (streaming)
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // Force scroll ke bawah saat loading mulai (user kirim pesan baru)
+  useEffect(() => {
+    if (loading) {
+      // Reset flag user scroll — karena user baru kirim pesan, arahkan ke bawah
+      userScrolledUpRef.current = false;
+      const el = bottomRef.current;
+      if (!el) return;
+      const container = el.parentElement;
+      if (!container) return;
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+  }, [loading]);
 
   // Fetch project info on mount
   useEffect(() => {
@@ -154,39 +219,145 @@ export default function App() {
     prevLoading.current = loading;
   }, [loading]);
 
-  // ── Folder upload ─────────────────────────────────────────
-  const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Browse modal state ──────────────────────────────────
+  const [showBrowseModal, setShowBrowseModal] = useState(false);
+
+  // ── Browse file/folder (multi-path: folder ATAU banyak file) ──
+  const handleBrowse = () => {
+    setShowBrowseModal(true);
+  };
+
+  const handleBrowseFolder = () => {
+    setShowBrowseModal(false);
+    browseInputRef.current?.click();
+  };
+
+  const handleBrowseFiles = () => {
+    setShowBrowseModal(false);
+    document.getElementById('browse-files-input')?.click();
+  };
+
+  const handleBrowseFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const formData = new FormData();
-    Array.from(files).forEach((f) => {
-      if (f.webkitRelativePath.includes('node_modules/')) return;
-      if (f.webkitRelativePath.includes('.git/')) return;
-      formData.append('files', f, f.webkitRelativePath);
-    });
+    // Kumpulkan semua path unik
+    const paths: string[] = [];
+    const folderSet = new Set<string>();
 
-    try {
-      const res = await axios.post(`${API_URL}/api/upload-folder`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const relPath = (f as any).webkitRelativePath || f.name;
+      // Kalau dari folder (webkitdirectory), ambil root folder-nya saja
+      if ((f as any).webkitRelativePath) {
+        const rootFolder = relPath.split('/')[0];
+        if (!folderSet.has(rootFolder)) {
+          folderSet.add(rootFolder);
+          paths.push(rootFolder);
+        }
+      } else {
+        // File individual — kirim path relatif dari project root
+        // Kalau user pilih file dari luar project, kirim full path
+        const fullPath = (f as any).path || f.name;
+        // Coba dapatkan path relatif dari projectPath
+        try {
+          // Gunakan path relatif jika file ada di dalam project
+          const projectRoot = (window as any).__PROJECT_PATH__ || '';
+          if (projectRoot && fullPath.startsWith(projectRoot)) {
+            paths.push(fullPath.slice(projectRoot.length + 1));
+          } else {
+            paths.push(fullPath);
+          }
+        } catch {
+          paths.push(fullPath);
+        }
+      }
+    }
+
+    // Step 1: render chip dengan spinner dulu (loading=true)
+    setBrowseChips((prev) => {
+      const existing = new Set(prev.map((c) => c.path));
+      const newPaths = paths.filter((p) => !existing.has(p));
+      return [...prev, ...newPaths.map((p) => ({ path: p, loading: true }))];
+    });
+    setBrowsePath((prev) => {
+      const all = prev ? prev.split(', ').filter(Boolean) : [];
+      paths.forEach((p) => { if (!all.includes(p)) all.push(p); });
+      return all.join(', ');
+    });
+    setInput('');
+
+    // Step 2: flush React batch dulu dengan flushSync agar spinner sempat render
+    // baru setelah itu hilangkan loading
+    setTimeout(() => {
+      setBrowseChips((prev) =>
+        prev.map((c) => (paths.includes(c.path) ? { ...c, loading: false } : c))
+      );
+    }, 16); // 16ms = 1 frame (60fps), cukup 1 tick event loop
+  };
+
+  const handleClearBrowse = (idx?: number) => {
+    if (idx === undefined || idx === -1) {
+      // Hapus semua
+      setBrowsePath('');
+      setBrowseChips([]);
+    } else {
+      // Hapus satu chip — jangan reset input user!
+      setBrowseChips((prev) => prev.filter((_, i) => i !== idx));
+      setBrowsePath((prev) => {
+        const all = prev.split(', ').filter(Boolean);
+        all.splice(idx, 1);
+        return all.join(', ');
       });
-      setProject({ ...res.data, files: res.data.files || FALLBACK_FILES });
-      setSelectedPath(res.data.projectPath || 'project');
-    } catch {
-      console.error('Upload gagal');
     }
   };
 
+  // ── Refs untuk akses state terbaru tanpa stale closure ─────
+  const inputRef = useRef(input);
+  const browseChipsRef = useRef(browseChips);
+  const browsePathRef = useRef(browsePath);
+  const loadingRef = useRef(loading);
+
+  // Sync refs setiap state berubah
+  useEffect(() => { inputRef.current = input; }, [input]);
+  useEffect(() => { browseChipsRef.current = browseChips; }, [browseChips]);
+  useEffect(() => { browsePathRef.current = browsePath; }, [browsePath]);
+  useEffect(() => { loadingRef.current = loading; }, [loading]);
+
   // ── Send message with SSE streaming ───────────────────────
   const handleSend = useCallback(async (text?: string) => {
-    const query = (text ?? input).trim();
-    if (!query || loading) return;
+    // Pakai refs untuk hindari stale closure — selalu baca nilai TERBARU
+    const currentInput = inputRef.current;
+    const currentChips = browseChipsRef.current;
+    const currentPath = browsePathRef.current;
+    const isLoading = loadingRef.current;
+
+    // Gabungkan input + browseChips sebagai konteks
+    let query = (text ?? currentInput).trim();
+    const hasChips = currentChips.length > 0;
+    if (!query && !hasChips) return;
+
+    // Siapkan payload dengan path rujukan
+    const payload: any = { query: query || '' };
+    if (currentPath) {
+      payload.referencedPaths = currentPath.split(', ').filter(Boolean);
+    }
+
+    if (!query && hasChips) {
+      const pathsList = currentChips.map((c) => c.path).join(', ');
+      payload.query = `Cari dan baca konten dari path ini: ${pathsList}, lalu beri ringkasan atau jawab pertanyaan berikut:`;
+    }
+    if (!payload.query || isLoading) return;
 
     const ts = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
     // Add user message
-    setMessages((p) => [...p, { role: 'user', content: query, timestamp: ts }]);
+    const displayText = text ?? currentInput;
+    const chipLabels = currentChips.map((c) => c.path).join(', ');
+    setMessages((p) => [...p, { role: 'user', content: displayText.trim() || `📂 ${chipLabels}`, timestamp: ts }]);
     setInput('');
+    setBrowseChips([]);
+    setBrowsePath('');
     setLoading(true);
     setSidebarOpen(false);
 
@@ -201,7 +372,7 @@ export default function App() {
       const res = await fetch(`${API_URL}/api/analyze/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       });
 
@@ -218,100 +389,110 @@ export default function App() {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process complete SSE messages (separated by double newline)
-        while (buffer.includes('\n\n')) {
-          const idx = buffer.indexOf('\n\n');
-          const chunk = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
+        // ── SSE Parser yang benar ─────────────────────────────────
+        // SSE spec: event dipisah oleh \n\n (double newline)
+        // Tapi data JSON bisa mengandung \n — jadi kita harus parse
+        // line-by-line, bukan split by \n\n
+        while (true) {
+          // Cari double newline sebagai pemisah event
+          const doubleNl = buffer.indexOf('\n\n');
+          if (doubleNl === -1) break; // belum ada event lengkap
+
+          const chunk = buffer.slice(0, doubleNl);
+          buffer = buffer.slice(doubleNl + 2);
 
           // Parse event: and data: lines
           let eventType = '';
           let dataStr = '';
           for (const line of chunk.split('\n')) {
-            if (line.startsWith('event: ')) eventType = line.slice(7).trim();
-            else if (line.startsWith('data: ')) dataStr = line.slice(6);
+            const trimmed = line.trim();
+            if (trimmed.startsWith('event: ')) eventType = trimmed.slice(7).trim();
+            else if (trimmed.startsWith('data: ')) dataStr = trimmed.slice(6);
           }
           if (!eventType || !dataStr) continue;
 
+          // Parse JSON data
+          let payload: any;
           try {
-            const payload = JSON.parse(dataStr);
-
-            switch (eventType) {
-              case 'tool_start': {
-                const toolName: string = payload.name;
-                const toolArgs: Record<string, unknown> | undefined = payload.args;
-                setMessages((p) => {
-                  const msgs = [...p];
-                  const last = msgs[msgs.length - 1];
-                  if (last?.role === 'assistant') {
-                    const blocks = [...(last.blocks || [])];
-                    blocks.push({ type: 'tool', name: toolName, status: 'running', args: toolArgs });
-                    msgs[msgs.length - 1] = { ...last, blocks };
-                  }
-                  return msgs;
-                });
-                break;
-              }
-
-              case 'tool_end': {
-                const toolName: string = payload.name;
-                const preview: string = payload.preview || '';
-                setMessages((p) => {
-                  const msgs = [...p];
-                  const last = msgs[msgs.length - 1];
-                  if (last?.role === 'assistant') {
-                    const blocks = [...(last.blocks || [])];
-                    for (let i = blocks.length - 1; i >= 0; i--) {
-                      const b = blocks[i];
-                      if (b.type === 'tool' && b.name === toolName && b.status === 'running') {
-                        blocks[i] = { ...b, status: 'done' as const, preview };
-                        break;
-                      }
-                    }
-                    msgs[msgs.length - 1] = { ...last, blocks };
-                  }
-                  return msgs;
-                });
-                break;
-              }
-
-              case 'token': {
-                const token: string = payload.text;
-                setMessages((p) => {
-                  const msgs = [...p];
-                  const last = msgs[msgs.length - 1];
-                  if (last?.role === 'assistant') {
-                    const blocks = [...(last.blocks || [])];
-                    const lastBlock = blocks[blocks.length - 1];
-                    if (lastBlock?.type === 'text') {
-                      blocks[blocks.length - 1] = { ...lastBlock, text: lastBlock.text + token };
-                    } else {
-                      blocks.push({ type: 'text', text: token });
-                    }
-                    msgs[msgs.length - 1] = { ...last, blocks };
-                  }
-                  return msgs;
-                });
-                break;
-              }
-
-              case 'done':
-                // Final text already accumulated via tokens
-                break;
-
-              case 'error':
-                setMessages((p) => {
-                  const msgs = [...p];
-                  const last = msgs[msgs.length - 1];
-                  if (last?.role === 'assistant' && (!last.blocks || last.blocks.length === 0)) {
-                    msgs[msgs.length - 1] = { ...last, blocks: [{ type: 'text', text: `⚠️ Error: ${payload.message}` }] };
-                  }
-                  return msgs;
-                });
-                break;
-            }
+            payload = JSON.parse(dataStr);
           } catch {
-            // Skip malformed JSON
+            continue; // skip malformed JSON
+          }
+
+          switch (eventType) {
+            case 'tool_start': {
+              const toolName: string = payload.name;
+              const toolArgs: Record<string, unknown> | undefined = payload.args;
+              const toolDesc: string = payload.description || '';
+              setMessages((p) => {
+                const msgs = [...p];
+                const last = msgs[msgs.length - 1];
+                if (last?.role === 'assistant') {
+                  const blocks = [...(last.blocks || [])];
+                  blocks.push({ type: 'tool', name: toolName, status: 'running', args: toolArgs, description: toolDesc });
+                  msgs[msgs.length - 1] = { ...last, blocks };
+                }
+                return msgs;
+              });
+              break;
+            }
+
+            case 'tool_end': {
+              const toolName: string = payload.name;
+              const preview: string = payload.preview || '';
+              setMessages((p) => {
+                const msgs = [...p];
+                const last = msgs[msgs.length - 1];
+                if (last?.role === 'assistant') {
+                  const blocks = [...(last.blocks || [])];
+                  for (let i = blocks.length - 1; i >= 0; i--) {
+                    const b = blocks[i];
+                    if (b.type === 'tool' && b.name === toolName && b.status === 'running') {
+                      blocks[i] = { ...b, status: 'done' as const, preview };
+                      break;
+                    }
+                  }
+                  msgs[msgs.length - 1] = { ...last, blocks };
+                }
+                return msgs;
+              });
+              break;
+            }
+
+            case 'token': {
+              const token: string = payload.text;
+              setMessages((p) => {
+                const msgs = [...p];
+                const last = msgs[msgs.length - 1];
+                if (last?.role === 'assistant') {
+                  const blocks = [...(last.blocks || [])];
+                  const lastBlock = blocks[blocks.length - 1];
+                  if (lastBlock?.type === 'text') {
+                    blocks[blocks.length - 1] = { ...lastBlock, text: lastBlock.text + token };
+                  } else {
+                    blocks.push({ type: 'text', text: token });
+                  }
+                  msgs[msgs.length - 1] = { ...last, blocks };
+                }
+                return msgs;
+              });
+              break;
+            }
+
+            case 'done':
+              // Final text already accumulated via tokens
+              break;
+
+            case 'error':
+              setMessages((p) => {
+                const msgs = [...p];
+                const last = msgs[msgs.length - 1];
+                if (last?.role === 'assistant' && (!last.blocks || last.blocks.length === 0)) {
+                  msgs[msgs.length - 1] = { ...last, blocks: [{ type: 'text', text: `⚠️ Error: ${payload.message}` }] };
+                }
+                return msgs;
+              });
+              break;
           }
         }
       }
@@ -329,7 +510,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [input, loading]);
+  }, []); // ⬅️ EMPTY array — semua state diakses via refs, jadi handleSend STABLE selamanya!
 
   // ── Stop generation ──────────────────────────────────────
   const handleStop = useCallback(() => {
@@ -427,8 +608,6 @@ export default function App() {
           collapsed={sidebarCollapsed}
           onClose={() => setSidebarOpen(false)}
           onToggleCollapse={() => setSidebarCollapsed(prev => !prev)}
-          selectedPath={selectedPath}
-          onFolderUpload={handleFolderUpload}
           onNewChat={handleNewChat}
           sessions={sessions}
           activeSessionId={activeSessionId}
@@ -444,9 +623,20 @@ export default function App() {
             onClick={() => setSidebarOpen(true)}
             aria-label="Buka sidebar"
             className="lg:hidden fixed top-4 left-4 z-30 p-2 rounded-xl
-                       bg-white/[0.04] backdrop-blur-md border border-white/[0.06]
-                       text-white/35 hover:text-white/60 hover:bg-white/[0.08]
                        transition-all duration-200"
+            style={{
+              background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-default)',
+              color: 'var(--text-primary)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--bg-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--bg-tertiary)';
+            }}
           >
             <PanelLeftOpen size={18} />
           </button>
@@ -456,12 +646,46 @@ export default function App() {
             onClick={() => setSidebarCollapsed(false)}
             aria-label="Lebarkan sidebar"
             className={`hidden lg:flex fixed top-4 left-[68px] z-30 p-2 rounded-xl
-                       bg-white/[0.03] backdrop-blur-md border border-white/[0.04]
-                       text-white/25 hover:text-white/50 hover:bg-white/[0.06]
                        transition-all duration-300
                        ${sidebarCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            style={{
+              background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-primary)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--bg-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--bg-tertiary)';
+            }}
           >
             <PanelLeftOpen size={16} />
+          </button>
+
+          {/* Theme toggle — pojok kanan atas */}
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Beralih ke mode terang' : 'Beralih ke mode gelap'}
+            className="fixed top-4 right-4 z-30 p-2 rounded-xl
+                       transition-all duration-200"
+            style={{
+              background: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-default)',
+              color: 'var(--text-primary)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--bg-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.background = 'var(--bg-tertiary)';
+            }}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
 
           {/* Messages */}
@@ -498,18 +722,19 @@ export default function App() {
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <div className="w-[30px] h-[30px] rounded-full bg-white/[0.04] flex items-center justify-center flex-shrink-0">
-                        <Loader2 size={14} className="text-white/30 animate-spin" />
+                      <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0"
+                           style={{ background: 'var(--bg-tertiary)' }}>
+                        <Loader2 size={14} className="animate-spin" style={{ color: 'var(--text-primary)' }} />
                       </div>
-                      <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-tl-md
-                                    bg-white/[0.02]">
-                        <span className="text-[14px] text-white/30">Agent sedang berpikir</span>
+                      <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-tl-md"
+                           style={{ background: 'var(--bg-secondary)' }}>
+                        <span className="text-[14px]" style={{ color: 'var(--text-primary)' }}>Agent sedang berpikir</span>
                         <span className="flex gap-1">
                           {[0, 150, 300].map((d) => (
                             <span
                               key={d}
-                              className="w-1 h-1 rounded-full bg-white/20"
-                              style={{ animation: `dots 1.2s ease-in-out ${d}ms infinite` }}
+                              className="w-1 h-1 rounded-full"
+                              style={{ background: '#6b6b6b', animation: `dots 1.2s ease-in-out ${d}ms infinite` }}
                             />
                           ))}
                         </span>
@@ -525,16 +750,177 @@ export default function App() {
 
           {/* Input */}
           <div className="w-full max-w-[850px] px-[22px]">
+            {/* Hidden file input — bisa pilih folder (webkitdirectory) ATAU banyak file (multiple) */}
+            {/* Dua input: satu untuk folder (webkitdirectory), satu untuk file individual */}
+            <input
+              ref={browseInputRef}
+              type="file"
+              // @ts-expect-error webkitdirectory is valid
+              webkitdirectory=""
+              className="hidden"
+              onChange={handleBrowseFile}
+              aria-label="Browse folder"
+            />
+            <input
+              type="file"
+              multiple
+              className="hidden"
+              id="browse-files-input"
+              onChange={handleBrowseFile}
+              aria-label="Browse file"
+            />
+
             <InputArea
               value={input}
               onChange={setInput}
               onSend={() => handleSend()}
               onStop={handleStop}
               loading={loading}
+              browsePath={browsePath}
+              browseChips={browseChips}
+              onBrowse={handleBrowse}
+              onClearBrowse={handleClearBrowse}
             />
           </div>
         </main>
       </div>
+
+      {/* ── Browse Modal ─────────────────────────────────────── */}
+      <AnimatePresence>
+        {showBrowseModal && (
+          <>
+            {/* Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-50"
+              style={{ background: 'rgba(0,0,0,0.5)' }}
+              onClick={() => setShowBrowseModal(false)}
+            />
+
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                         w-[320px] rounded-2xl overflow-hidden"
+              style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
+                boxShadow: 'var(--shadow-lg)',
+              }}
+            >
+              {/* Header */}
+              <div className="px-5 pt-5 pb-3">
+                <h3 className="text-[15px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  Rujuk file atau folder
+                </h3>
+                <p className="text-[13px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Pilih sumber yang ingin dirujuk ke agent
+                </p>
+              </div>
+
+              {/* Divider */}
+              <div className="mx-5 h-px" style={{ background: 'var(--border-subtle)' }} />
+
+              {/* Options */}
+              <div className="px-5 py-4 space-y-2">
+                <button
+                  onClick={handleBrowseFolder}
+                  className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl
+                             transition-all duration-150 text-left"
+                  style={{
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-default)',
+                    color: 'var(--text-primary)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-hover)';
+                    e.currentTarget.style.borderColor = 'var(--border-strong)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-secondary)';
+                    e.currentTarget.style.borderColor = 'var(--border-default)';
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                       style={{ background: 'var(--accent-soft)' }}>
+                    <FolderOpen size={18} style={{ color: 'var(--accent)' }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-[14px] font-medium">Folder project</span>
+                    <span className="block text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      Rujuk semua file dalam satu folder
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleBrowseFiles}
+                  className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl
+                             transition-all duration-150 text-left"
+                  style={{
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-default)',
+                    color: 'var(--text-primary)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-hover)';
+                    e.currentTarget.style.borderColor = 'var(--border-strong)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-secondary)';
+                    e.currentTarget.style.borderColor = 'var(--border-default)';
+                  }}
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                       style={{ background: 'var(--accent-soft)' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)' }}>
+                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                      <line x1="10" y1="9" x2="8" y2="9" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-[14px] font-medium">File individual</span>
+                    <span className="block text-[12px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      Pilih satu atau beberapa file spesifik
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 pb-4 pt-1">
+                <button
+                  onClick={() => setShowBrowseModal(false)}
+                  className="w-full py-2.5 rounded-xl text-[13px] font-medium
+                             transition-all duration-150"
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-default)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-tertiary)';
+                  }}
+                >
+                  Batal
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -68,9 +68,26 @@ async function main() {
     console.log(chalk.blue(`📦 Skills aktif: ${installedSkills.join(', ')}`));
   }
 
-  const memSummary = await memory.getSummary(projectPath);
-  if (memSummary) {
-    console.log(chalk.blue(`🧠 Memory loaded: ${memSummary}`));
+  const memContext = await memory.getRecentContext(projectPath);
+  if (memContext.summary || memContext.longTermSummary) {
+    console.log(chalk.blue(`🧠 Memory loaded: ${memContext.messages?.length || 0} pesan tersimpan`));
+    if (memContext.facts?.length) console.log(chalk.gray(`   🔧 ${memContext.facts.length} fakta teknis`));
+    if (memContext.decisions?.length) console.log(chalk.gray(`   🎯 ${memContext.decisions.length} keputusan arsitektur`));
+    if (memContext.userPreferences?.length) console.log(chalk.gray(`   💡 ${memContext.userPreferences.length} preferensi user`));
+    if (memContext.constraints?.length) console.log(chalk.gray(`   ⚠️ ${memContext.constraints.length} constraint`));
+  }
+
+  // 🌐 Load global memory (lintas project)
+  try {
+    const globalContext = await memory.getGlobalContext();
+    const hasGlobal = globalContext.userPreferences?.length || globalContext.facts?.length || globalContext.decisions?.length || globalContext.constraints?.length || globalContext.projectHistory?.length;
+    if (hasGlobal) {
+      console.log(chalk.magenta(`🌐 Global memory: ${globalContext.userPreferences?.length || 0} preferensi, ${globalContext.facts?.length || 0} fakta, ${globalContext.projectHistory?.length || 0} project`));
+    }
+    // Catat project ini di history
+    await memory.recordProject(projectPath, projectInfo.techStack);
+  } catch {
+    // Global memory opsional — skip kalau error
   }
 
   console.log(chalk.gray('\nKetik pertanyaanmu. Commands: /skill, /scan, /tree, /memory, /reset, /help, /exit\n'));

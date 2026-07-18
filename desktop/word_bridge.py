@@ -20,6 +20,8 @@ Contoh command via stdin:
 
 import time
 import re
+import sys
+import os
 from desktop.office_base import OfficeBridge, is_windows
 
 
@@ -71,6 +73,9 @@ class WordBridge(OfficeBridge):
             "fix_spacing": self._fix_spacing,
             "fix_fonts": self._fix_fonts,
             "apply_style": self._apply_style,
+
+            # ── Python Exec (langsung) ──
+            "exec_python": self._exec_python,
 
             # ── Web + Tulis ──
             "search_web_and_write": self._search_web_and_write,
@@ -158,7 +163,7 @@ class WordBridge(OfficeBridge):
         # Go to page
         self.app.Selection.GoTo(What=1, Which=1, Count=page_num)
         # Select to end of page
-        self.app.Selection.Bookmarks("\Page").Select()
+        self.app.Selection.Bookmarks("\\Page").Select()
 
         return {
             "page": page_num,
@@ -733,6 +738,54 @@ class WordBridge(OfficeBridge):
             self.app.Selection.Delete()
             return {"action": "delete_text", "deleted": find_text, "found": True}
         return {"action": "delete_text", "deleted": "", "found": False}
+
+
+    # ═══════════════════════════════════════════════════════════════
+    # 🐍 PYTHON EXEC — Eksekusi kode Python langsung ke Word
+    # ═══════════════════════════════════════════════════════════════
+
+    def _exec_python(self, cmd):
+        """Eksekusi kode Python langsung ke Word via COM.
+        
+        Variabel yang tersedia di scope:
+          - word: self.app (Word.Application)
+          - doc: self._ensure_active_document()
+          - selection: self.app.Selection
+        
+        Contoh:
+          code = '''
+          table = doc.Tables.Add(selection.Range, 3, 4)
+          table.Cell(1, 1).Range.Text = "Nama"
+          table.Cell(1, 2).Range.Text = "Harga"
+          table.Cell(1, 3).Range.Text = "Qty"
+          table.Cell(1, 4).Range.Text = "Total"
+          '''
+        """
+        code = cmd.get("code", "").strip()
+        if not code:
+            raise ValueError("Parameter 'code' wajib diisi")
+
+        # Siapkan scope
+        doc = self._ensure_active_document()
+        word = self.app
+        selection = self.app.Selection
+        local_vars = {
+            "word": word,
+            "doc": doc,
+            "selection": selection,
+            "app": self.app,
+        }
+
+        try:
+            # Eksekusi kode — timeout di-handle oleh Python/GIL
+            exec(code, {"__builtins__": __builtins__}, local_vars)
+            return {
+                "action": "exec_python",
+                "status": "success",
+                "code_length": len(code),
+            }
+        except Exception as e:
+            raise RuntimeError(f"Python exec error: {e}\n\nCode:\n{code[:500]}")
 
 
 # ═══════════════════════════════════════════════════════════════
