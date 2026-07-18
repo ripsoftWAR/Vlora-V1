@@ -1,8 +1,8 @@
-import { useState, useCallback, memo } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useCallback, memo, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { User, Bot, Copy, Check, RefreshCw } from 'lucide-react';
+import { User, Bot, Copy, Check, RefreshCw, ArrowUp, Paperclip, Send } from 'lucide-react';
 import ToolCallCard from './ToolCallCard';
 
 type Block =
@@ -88,12 +88,135 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   );
 }
 
+// ── Inline Selection Toolbar ────────────────────────────────────
+function InlineSelectionToolbar({ selectedText, onAskFlora, position }: {
+  selectedText: string;
+  onAskFlora: (text: string) => void;
+  position: { x: number; y: number } | null;
+}) {
+  if (!position) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9, y: -4 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9, y: -4 }}
+      transition={{ duration: 0.12, ease: 'easeOut' }}
+      className="fixed z-[9999] pointer-events-auto"
+      style={{
+        left: position.x,
+        top: position.y,
+      }}
+    >
+      <button
+        onClick={() => onAskFlora(selectedText)}
+        className="flex items-center gap-[6px] px-[10px] py-[5px] rounded-lg
+                   text-[13px] font-medium shadow-lg
+                   transition-all duration-150"
+        style={{
+          background: 'var(--bg-tertiary)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border-subtle)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--bg-secondary)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'var(--bg-tertiary)';
+        }}
+      >
+        <ArrowUp size={14} />
+        <span>Tanya FLORA</span>
+      </button>
+    </motion.div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────
 const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreaming = false }: Props) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
   const blocks = !isUser ? (message.blocks || []) : [];
   const hasBlocks = blocks.length > 0;
+
+  // ── Inline Selection State ──────────────────────────────────
+  const [selectedText, setSelectedText] = useState('');
+  const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Handler: user selesai blok teks (mouseup)
+  const handleSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+      setSelectedText('');
+      setToolbarPos(null);
+      return;
+    }
+
+    const text = selection.toString().trim();
+    if (text.length < 2 || text.length > 2000) {
+      setToolbarPos(null);
+      return;
+    }
+
+    // Cek apakah selection ada di dalam komponen ini
+    const container = contentRef.current;
+    if (!container) return;
+
+    let isInside = false;
+    const range = selection.getRangeAt(0);
+    let node: Node | null = range.commonAncestorContainer;
+    while (node) {
+      if (node === container) {
+        isInside = true;
+        break;
+      }
+      node = node.parentNode;
+    }
+
+    if (!isInside) {
+      setToolbarPos(null);
+      return;
+    }
+
+    // Hitung posisi toolbar — di atas selection
+    const rect = range.getBoundingClientRect();
+    setSelectedText(text);
+    setToolbarPos({
+      x: rect.left + rect.width / 2 - 60, // center toolbar (120px wide / 2)
+      y: rect.top - 40, // di atas selection
+    });
+  }, []);
+
+  // Handler: user klik di luar → hide toolbar
+  const handleClickOutside = useCallback((e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('.inline-selection-toolbar')) return;
+    setSelectedText('');
+    setToolbarPos(null);
+  }, []);
+
+  // Register global listeners
+  useEffect(() => {
+    document.addEventListener('mouseup', handleSelection);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mouseup', handleSelection);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [handleSelection, handleClickOutside]);
+
+  // Callback: kirim teks yang diblok ke parent (App.tsx)
+  const handleAskFlora = useCallback((text: string) => {
+    // Dispatch custom event — App.tsx akan listen
+    const event = new CustomEvent('flora-inline-selection', {
+      detail: { text },
+      bubbles: true,
+    });
+    document.dispatchEvent(event);
+    setSelectedText('');
+    setToolbarPos(null);
+  }, []);
 
   // Gabung semua text blocks untuk copy
   const allText = blocks
@@ -148,15 +271,43 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
       `}>
         {/* Interleaved blocks — text & tool cards berseling */}
         {isUser ? (
-          <div className="rounded-[15px_15px_4px_15px] px-[18px] py-[11px] text-[17px] leading-[1.75] w-fit max-w-full"
-            style={{
-              background: 'var(--bg-tertiary)',
-              color: 'var(--text-primary)',
-            }}>
-            <p className="whitespace-pre-wrap">{message.content}</p>
+          <div className="flex flex-col gap-[7px] max-w-full">
+            {/* User message content */}
+            <div className="rounded-[15px_15px_4px_15px] px-[18px] py-[11px] text-[17px] leading-[1.75] w-fit max-w-full"
+              style={{
+                background: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+              }}>
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
+            {/* Inline selection chips — render sebagai badge di dalam bubble user */}
+            {message.blocks && message.blocks.length > 0 && (
+              <div className="flex flex-wrap gap-[5px] pl-[4px]">
+                {message.blocks.map((block, bi) => {
+                  if (block.type === 'tool' && block.name === '📎 inline') {
+                    return (
+                      <div
+                        key={bi}
+                        className="inline-flex items-center gap-[5px] px-[8px] py-[3px] rounded-lg text-[12px]"
+                        style={{
+                          background: 'var(--bg-tertiary)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--text-secondary)',
+                        }}
+                        title={block.preview}
+                      >
+                        <Paperclip size={10} />
+                        <span className="truncate max-w-[180px]">{block.description?.replace('Inline: ', '')}</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            )}
           </div>
         ) : hasBlocks ? (
-          <div className="flex flex-col gap-[7px]">
+          <div className="flex flex-col gap-[7px]" ref={contentRef}>
             {blocks.map((block, bi) => {
               const isLastBlock = bi === blocks.length - 1;
               const isLastTextBlock = block.type === 'text' && isLastBlock && isStreaming;
@@ -201,6 +352,17 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
                 </div>
               );
             })}
+
+            {/* Inline Selection Toolbar — muncul saat user blok teks */}
+            <AnimatePresence>
+              {selectedText && toolbarPos && (
+                <InlineSelectionToolbar
+                  selectedText={selectedText}
+                  onAskFlora={handleAskFlora}
+                  position={toolbarPos}
+                />
+              )}
+            </AnimatePresence>
           </div>
         ) : null}
 

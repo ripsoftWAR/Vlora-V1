@@ -5,6 +5,8 @@ import { Send, Loader2, Square, FolderOpen, X } from 'lucide-react';
 interface Chip {
   path: string;
   loading?: boolean;
+  _isInline?: boolean;
+  _fullText?: string;
 }
 
 interface Props {
@@ -71,10 +73,12 @@ export default function InputArea({ value, onChange, onSend, onStop, loading, br
               >
                 {chip.loading ? (
                   <Loader2 size={11} style={{ color: 'var(--text-primary)' }} className="animate-spin flex-shrink-0" />
+                ) : chip._isInline ? (
+                  <Send size={11} style={{ color: 'var(--text-primary)' }} className="flex-shrink-0" />
                 ) : (
                   <FolderOpen size={11} style={{ color: 'var(--text-primary)' }} className="flex-shrink-0" />
                 )}
-                <span className="text-[12px] truncate max-w-[200px]" style={{ color: 'var(--text-primary)' }} title={chip.path}>
+                <span className="text-[12px] truncate max-w-[200px]" style={{ color: 'var(--text-primary)' }} title={chip._fullText || chip.path}>
                   {chip.path}
                 </span>
                 <button

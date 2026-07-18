@@ -295,8 +295,24 @@ export class Agent {
       }
     }
 
+    // Parse blocks dari userMessage — kalau ada marker inline selection
+    // Format: [TEKS YANG DIBLOK USER]...\n\n[PERTANYAAN USER TENTANG TEKS DI ATAS]\n...
+    let userBlocks = undefined;
+    const inlineMatch = userMessage.match(/\[TEKS YANG DIBLOK USER\]\n([\s\S]*?)\n\n\[PERTANYAAN USER TENTANG TEKS DI ATAS\]/);
+    if (inlineMatch) {
+      const inlineText = inlineMatch[1].trim();
+      userBlocks = [
+        { type: 'text', text: userMessage.replace(/\[TEKS YANG DIBLOK USER\][\s\S]*?\[PERTANYAAN USER TENTANG TEKS DI ATAS\]\n/, '').trim() },
+        { type: 'tool', name: '📎 inline', status: 'done', preview: inlineText, description: `Inline: ${inlineText.slice(0, 50)}...` },
+      ];
+    }
+
     this.conversationHistory.push({ role: 'user', content: userMessage });
-    await this.memory.addMessage(this.projectPath, { role: 'user', content: userMessage });
+    await this.memory.addMessage(this.projectPath, { 
+      role: 'user', 
+      content: userMessage,
+      blocks: userBlocks,
+    });
 
     const projectContext = await this.scanner.getContextSummary();
     const memoryContext  = await this.memory.getRecentContext(this.projectPath);

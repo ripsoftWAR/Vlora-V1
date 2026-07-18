@@ -118,14 +118,35 @@ export default function App() {
           const mem = memRes.data;
           if (mem.messages && mem.messages.length > 0) {
             // Convert backend messages to frontend Message format
-            const restored: Message[] = mem.messages.map((m: any) => ({
-              role: m.role,
-              content: m.content || '',
-              blocks: m.blocks || (m.content ? [{ type: 'text', text: m.content }] : []),
-              timestamp: m.timestamp
-                ? new Date(m.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-                : '',
-            }));
+            const restored: Message[] = mem.messages.map((m: any) => {
+              // Restore blocks apa adanya — inline chips tetap tampil
+              let blocks = m.blocks;
+              if (!blocks || blocks.length === 0) {
+                blocks = m.content ? [{ type: 'text', text: m.content }] : [];
+              }
+              // Bersihkan content dari marker inline selection mentah
+              // Format: [TEKS YANG DIBLOK USER]\n<teks_diblok>\n\n[PERTANYAAN USER TENTANG TEKS DI ATAS]\n<pertanyaan>
+              // Yang mau ditampilkan: <teks_diblok> + <pertanyaan> (tanpa marker)
+              let cleanContent = m.content || '';
+              if (cleanContent.includes('[TEKS YANG DIBLOK USER]')) {
+                // Ambil teks yang diblok
+                const blokMatch = cleanContent.match(/\[TEKS YANG DIBLOK USER\]\n([\s\S]*?)\n\n\[PERTANYAAN/);
+                const blokText = blokMatch ? blokMatch[1].trim() : '';
+                // Ambil pertanyaan user
+                const qMatch = cleanContent.match(/\[PERTANYAAN USER TENTANG TEKS DI ATAS\]\n([\s\S]*)/);
+                const qText = qMatch ? qMatch[1].trim() : '';
+                // Gabung: teks blok + pertanyaan
+                cleanContent = [blokText, qText].filter(Boolean).join('\n');
+              }
+              return {
+                role: m.role,
+                content: cleanContent,
+                blocks,
+                timestamp: m.timestamp
+                  ? new Date(m.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                  : '',
+              };
+            });
             setMessages(restored);
           }
         }
@@ -218,6 +239,69 @@ export default function App() {
     }
     prevLoading.current = loading;
   }, [loading]);
+
+  // ── Inline Selection (dari desktop selection_watcher) ────
+  // Polling backend setiap 1 detik untuk cek apakah ada teks baru
+  // yang dikirim dari desktop selection_watcher
+  useEffect(() => {
+    const pollInline = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/inline-selection/pending`, {
+          timeout: 3000,
+        });
+        const selections = res.data.selections || [];
+        if (selections.length > 0) {
+          // Tambah setiap selection sebagai chip
+          for (const sel of selections) {
+            const label = sel.text.length > 50
+              ? sel.text.slice(0, 50) + '...'
+              : sel.text;
+            
+            // Cek duplikat
+            setBrowseChips((prev) => {
+              const existing = new Set(prev.map((c) => c.path));
+              if (existing.has(label)) return prev;
+              return [...prev, { path: label, loading: false, _isInline: true, _fullText: sel.text }];
+            });
+          }
+        }
+      } catch {
+        // Backend mungkin belum siap — skip
+      }
+    };
+
+    // Polling tiap 1 detik
+    const interval = setInterval(pollInline, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Inline Selection (dari ChatMessage — blok teks di UI FLORA) ──
+  // Listen custom event 'flora-inline-selection' dari ChatMessage
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.text) return;
+
+      const text = detail.text;
+      const label = text.length > 50 ? text.slice(0, 50) + '...' : text;
+
+      // Tambah sebagai chip badge di input
+      setBrowseChips((prev) => {
+        const existing = new Set(prev.map((c) => c.path));
+        if (existing.has(label)) return prev;
+        return [...prev, { path: label, loading: false, _isInline: true, _fullText: text }];
+      });
+
+      // Focus ke input
+      setTimeout(() => {
+        const textarea = document.querySelector('textarea');
+        if (textarea) textarea.focus();
+      }, 100);
+    };
+
+    document.addEventListener('flora-inline-selection', handler);
+    return () => document.removeEventListener('flora-inline-selection', handler);
+  }, []);
 
   // ── Browse modal state ──────────────────────────────────
   const [showBrowseModal, setShowBrowseModal] = useState(false);
@@ -343,6 +427,13 @@ export default function App() {
       payload.referencedPaths = currentPath.split(', ').filter(Boolean);
     }
 
+    // Kalau ada inline selection chips, kirim teks aslinya sebagai konteks
+    const inlineSelections = currentChips.filter(c => c._isInline && c._fullText);
+    if (inlineSelections.length > 0) {
+      const inlineTexts = inlineSelections.map(c => c._fullText).join('\n\n---\n\n');
+      payload.inlineSelection = inlineTexts;
+    }
+
     if (!query && hasChips) {
       const pathsList = currentChips.map((c) => c.path).join(', ');
       payload.query = `Cari dan baca konten dari path ini: ${pathsList}, lalu beri ringkasan atau jawab pertanyaan berikut:`;
@@ -351,10 +442,29 @@ export default function App() {
 
     const ts = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-    // Add user message
+    // Add user message — sertakan inline selection chips sebagai blocks
     const displayText = text ?? currentInput;
     const chipLabels = currentChips.map((c) => c.path).join(', ');
-    setMessages((p) => [...p, { role: 'user', content: displayText.trim() || `📂 ${chipLabels}`, timestamp: ts }]);
+    
+    // Buat blocks untuk user message: text + inline chips
+    const userBlocks: Block[] = [];
+    if (displayText.trim()) {
+      userBlocks.push({ type: 'text', text: displayText.trim() });
+    }
+    // Inline selection chips jadi badge di dalam bubble user
+    const inlineChips = currentChips.filter(c => c._isInline && c._fullText);
+    if (inlineChips.length > 0) {
+      for (const chip of inlineChips) {
+        userBlocks.push({ type: 'tool', name: '📎 inline', status: 'done', preview: chip._fullText, description: `Inline: ${chip.path}` });
+      }
+    }
+    
+    setMessages((p) => [...p, { 
+      role: 'user', 
+      content: displayText.trim() || `📂 ${chipLabels}`, 
+      blocks: userBlocks.length > 0 ? userBlocks : undefined,
+      timestamp: ts 
+    }]);
     setInput('');
     setBrowseChips([]);
     setBrowsePath('');
@@ -544,15 +654,35 @@ export default function App() {
       const res = await axios.post(`${API_URL}/api/sessions/${sessionId}/activate`);
       const sess = res.data;
       setActiveSessionId(sess.id);
-      // Restore messages
-      const restored: Message[] = (sess.messages || []).map((m: any) => ({
-        role: m.role,
-        content: m.content || '',
-        blocks: m.blocks || (m.content ? [{ type: 'text', text: m.content }] : []),
-        timestamp: m.timestamp
-          ? new Date(m.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-          : '',
-      }));
+      // Restore messages — inline chips tetap tampil, bersihkan content mentah
+      const restored: Message[] = (sess.messages || []).map((m: any) => {
+        let blocks = m.blocks;
+        if (!blocks || blocks.length === 0) {
+          blocks = m.content ? [{ type: 'text', text: m.content }] : [];
+        }
+        // Bersihkan content dari marker inline selection mentah
+        // Format: [TEKS YANG DIBLOK USER]\n<teks_diblok>\n\n[PERTANYAAN USER TENTANG TEKS DI ATAS]\n<pertanyaan>
+        // Yang mau ditampilkan: <teks_diblok> + <pertanyaan> (tanpa marker)
+        let cleanContent = m.content || '';
+        if (cleanContent.includes('[TEKS YANG DIBLOK USER]')) {
+          // Ambil teks yang diblok
+          const blokMatch = cleanContent.match(/\[TEKS YANG DIBLOK USER\]\n([\s\S]*?)\n\n\[PERTANYAAN/);
+          const blokText = blokMatch ? blokMatch[1].trim() : '';
+          // Ambil pertanyaan user
+          const qMatch = cleanContent.match(/\[PERTANYAAN USER TENTANG TEKS DI ATAS\]\n([\s\S]*)/);
+          const qText = qMatch ? qMatch[1].trim() : '';
+          // Gabung: teks blok + pertanyaan
+          cleanContent = [blokText, qText].filter(Boolean).join('\n');
+        }
+        return {
+          role: m.role,
+          content: cleanContent,
+          blocks,
+          timestamp: m.timestamp
+            ? new Date(m.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+            : '',
+        };
+      });
       setMessages(restored);
     } catch (err) {
       console.error('Gagal switch session:', err);

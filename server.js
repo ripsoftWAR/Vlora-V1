@@ -49,18 +49,58 @@ const agent        = new Agent({ apiKey, memory, scanner, projectPath, skillMana
 
 console.log(`🤖 Agent siap! Provider: ${provider.toUpperCase()}`);
 
+// ── Inline Selection (dari desktop selection_watcher) ──────────
+// Selection watcher di desktop kirim teks yang diblok user ke sini,
+// lalu backend forward ke frontend via SSE event 'inline_selection'.
+// Frontend render sebagai chip badge di input area.
+
+// Store untuk pending inline selections — frontend polling
+let _pendingInlineSelections = [];
+
+app.post('/api/inline-selection', (req, res) => {
+  const { text } = req.body;
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: 'Text kosong' });
+  }
+
+  console.log(`📎 [Inline Selection] Teks diterima: "${text.slice(0, 80)}..."`);
+
+  // Simpan ke pending list
+  _pendingInlineSelections.push({
+    text: text.trim(),
+    timestamp: Date.now(),
+  });
+
+  // Batasi maks 10 pending
+  if (_pendingInlineSelections.length > 10) {
+    _pendingInlineSelections = _pendingInlineSelections.slice(-10);
+  }
+
+  res.json({ ok: true, length: text.length });
+});
+
+// Frontend polling endpoint — ambil pending inline selections
+app.get('/api/inline-selection/pending', (req, res) => {
+  const selections = [..._pendingInlineSelections];
+  _pendingInlineSelections = []; // clear setelah diambil
+  res.json({ selections });
+});
+
 // ── Routes ─────────────────────────────────────────────────────
 
 // Chat / analyze (SSE streaming — realtime)
 app.post('/api/analyze/stream', async (req, res) => {
-  const { query, referencedPaths } = req.body;
-  if (!query && (!referencedPaths || referencedPaths.length === 0)) {
+  const { query, referencedPaths, inlineSelection } = req.body;
+  if (!query && (!referencedPaths || referencedPaths.length === 0) && !inlineSelection) {
     return res.status(400).json({ error: 'Query kosong' });
   }
 
   console.log(`📩 [SSE] Query: ${(query || '').slice(0, 80)}`);
   if (referencedPaths?.length) {
     console.log(`📎 Referenced paths: ${referencedPaths.join(', ')}`);
+  }
+  if (inlineSelection) {
+    console.log(`📎 Inline selection: "${inlineSelection.slice(0, 80)}..."`);
   }
 
   // SSE headers — PASTIIN gak ada compression/buffering
@@ -114,6 +154,17 @@ app.post('/api/analyze/stream', async (req, res) => {
 
     if (fileContents.length > 0) {
       enrichedQuery = `[RUJUKAN FILE]\n${fileContents.join('\n\n')}\n\n[PERTANYAAN]\n${query || 'Analisa konten dari file-file yang dirujuk di atas.'}`;
+    }
+  }
+
+  // Kalau ada inline selection, inject sebagai konteks teks yang diblok user
+  // DILUAR blok referencedPaths — jadi tetap diproses meski tanpa browse file
+  if (inlineSelection) {
+    const inlineBlock = `\n\n[TEKS YANG DIBLOK USER]\n${inlineSelection}\n\n`;
+    if (enrichedQuery) {
+      enrichedQuery = `${inlineBlock}[PERTANYAAN USER TENTANG TEKS DI ATAS]\n${enrichedQuery}`;
+    } else {
+      enrichedQuery = `${inlineBlock}[INSTRUKSI]\nJelaskan atau analisa teks yang diblok di atas.`;
     }
   }
 
