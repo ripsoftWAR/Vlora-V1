@@ -65,7 +65,7 @@ export default function InputArea({ value, onChange, onSend, onStop, loading, br
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.12, delay: idx * 0.03 }}
-                className="inline-flex items-center gap-[6px] px-[10px] py-[4px] rounded-lg"
+                className="inline-flex items-center gap-[6px] px-[10px] py-[4px] rounded-lg group/chip relative"
                 style={{
                   background: 'var(--bg-tertiary)',
                   border: '1px solid var(--border-default)',
@@ -74,13 +74,20 @@ export default function InputArea({ value, onChange, onSend, onStop, loading, br
                 {chip.loading ? (
                   <Loader2 size={11} style={{ color: 'var(--text-primary)' }} className="animate-spin flex-shrink-0" />
                 ) : chip._isInline ? (
-                  <Send size={11} style={{ color: 'var(--text-primary)' }} className="flex-shrink-0" />
+                  <span className="text-[10px] font-medium" style={{ color: 'var(--text-primary)' }}>in</span>
                 ) : (
                   <FolderOpen size={11} style={{ color: 'var(--text-primary)' }} className="flex-shrink-0" />
                 )}
-                <span className="text-[12px] truncate max-w-[200px]" style={{ color: 'var(--text-primary)' }} title={chip._fullText || chip.path}>
+                <span className="text-[12px] truncate max-w-[200px]" style={{ color: 'var(--text-primary)' }}>
                   {chip.path}
                 </span>
+                {/* Tooltip kustom — muncul di hover */}
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-[6px] px-[10px] py-[4px] rounded-lg
+                             text-[12px] whitespace-nowrap pointer-events-none z-50
+                             opacity-0 group-hover/chip:opacity-100 transition-opacity duration-150"
+                     style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}>
+                  {chip._fullText || chip.path}
+                </div>
                 <button
                   onClick={() => onClearBrowse?.(idx)}
                   className="p-[1px] rounded transition-colors flex-shrink-0"

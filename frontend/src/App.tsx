@@ -455,13 +455,13 @@ export default function App() {
     const inlineChips = currentChips.filter(c => c._isInline && c._fullText);
     if (inlineChips.length > 0) {
       for (const chip of inlineChips) {
-        userBlocks.push({ type: 'tool', name: '📎 inline', status: 'done', preview: chip._fullText, description: `Inline: ${chip.path}` });
+        userBlocks.push({ type: 'tool', name: 'inline', status: 'done', preview: chip._fullText, description: `Inline: ${chip.path}` });
       }
     }
     
     setMessages((p) => [...p, { 
       role: 'user', 
-      content: displayText.trim() || `📂 ${chipLabels}`, 
+      content: displayText.trim() || `[inline] ${chipLabels}`, 
       blocks: userBlocks.length > 0 ? userBlocks : undefined,
       timestamp: ts 
     }]);

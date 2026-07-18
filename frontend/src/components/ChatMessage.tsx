@@ -284,20 +284,26 @@ const ChatMessage = memo(function ChatMessage({ message, onRegenerate, isStreami
             {message.blocks && message.blocks.length > 0 && (
               <div className="flex flex-wrap gap-[5px] pl-[4px]">
                 {message.blocks.map((block, bi) => {
-                  if (block.type === 'tool' && block.name === '📎 inline') {
+                  if (block.type === 'tool' && block.name === 'inline') {
                     return (
                       <div
                         key={bi}
-                        className="inline-flex items-center gap-[5px] px-[8px] py-[3px] rounded-lg text-[12px]"
+                        className="inline-flex items-center gap-[5px] px-[8px] py-[3px] rounded-lg text-[12px] group/chip relative"
                         style={{
                           background: 'var(--bg-tertiary)',
                           border: '1px solid var(--border-subtle)',
                           color: 'var(--text-secondary)',
                         }}
-                        title={block.preview}
                       >
-                        <Paperclip size={10} />
-                        <span className="truncate max-w-[180px]">{block.description?.replace('Inline: ', '')}</span>
+                        <Send size={10} />
+                        <span className="truncate max-w-[200px]">{block.description?.replace('Inline: ', '')}</span>
+                        {/* Tooltip kustom — muncul di hover */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-[6px] px-[10px] py-[4px] rounded-lg
+                                     text-[12px] whitespace-nowrap pointer-events-none z-50
+                                     opacity-0 group-hover/chip:opacity-100 transition-opacity duration-150"
+                             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}>
+                          {block.preview}
+                        </div>
                       </div>
                     );
                   }
