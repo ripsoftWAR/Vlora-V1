@@ -115,6 +115,17 @@ app.post('/api/analyze/stream', async (req, res) => {
   // Flush headers immediately
   res.flushHeaders();
 
+  // 💓 Heartbeat — kirim komentar kosong tiap 15 detik
+  // Biar koneksi SSE gak diputus proxy/load balancer
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(':heartbeat\n\n');
+      if (typeof res.flush === 'function') res.flush();
+    } catch {
+      clearInterval(heartbeat);
+    }
+  }, 15000);
+
   const send = (event, data) => {
     const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     res.write(msg);
@@ -183,6 +194,7 @@ app.post('/api/analyze/stream', async (req, res) => {
         send('done', { text: fullText });
       },
       onError: (err) => {
+        console.error('❌ Agent error callback:', err.message);
         send('error', { message: err.message });
       },
     });
@@ -190,7 +202,22 @@ app.post('/api/analyze/stream', async (req, res) => {
     console.error('❌ Agent SSE error:', err.message);
     try { send('error', { message: err.message }); } catch {}
   } finally {
-    try { res.end(); } catch {}
+    // Bersihin heartbeat
+    clearInterval(heartbeat);
+    
+    // 💾 Pastiin selalu kirim done event kalau belum terkirim
+    // Biar frontend tahu stream selesai dan loading mati
+    try {
+      send('done', { text: '' });
+    } catch {}
+    
+    // 🛡️ Force end response — pastiin koneksi bener-bener ditutup
+    // Biar frontend gak nunggu forever
+    try {
+      if (!res.writableEnded) {
+        res.end();
+      }
+    } catch {}
   }
 });
 

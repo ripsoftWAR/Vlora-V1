@@ -122,15 +122,25 @@ class FreeCADSocketBridge:
             response = self.sock.recv(4096)
             self.sock.settimeout(RESPONSE_TIMEOUT)
             return True
-        except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError):
-            self._log("Koneksi putus. Mencoba reconnect...")
+        except (socket.timeout, ConnectionResetError, BrokenPipeError, OSError) as e:
+            self._log(f"Koneksi putus: {e}. Mencoba reconnect...")
+            return self.reconnect()
+        except Exception as e:
+            self._log(f"Unexpected error di ensure_connected: {e}")
+            self.disconnect()
             return self.reconnect()
 
     # ── Send Command & Receive Response ──────────────────────────
 
     def send_command(self, command: dict) -> dict:
         """Kirim command ke FreeCAD dan tunggu response."""
-        self.ensure_connected()
+        try:
+            self.ensure_connected()
+        except Exception as e:
+            return {"success": False, "error": f"Gagal konek ke FreeCAD: {e}"}
+
+        if self.sock is None:
+            return {"success": False, "error": "Socket tidak tersedia setelah ensure_connected"}
 
         payload = json.dumps(command) + '\n'
         self.sock.settimeout(RESPONSE_TIMEOUT)
@@ -140,6 +150,9 @@ class FreeCADSocketBridge:
         except (BrokenPipeError, ConnectionResetError, OSError) as e:
             self.disconnect()
             return {"success": False, "error": f"Koneksi terputus saat kirim: {e}"}
+        except Exception as e:
+            self.disconnect()
+            return {"success": False, "error": f"Error kirim data: {e}"}
 
         # Baca response
         try:
@@ -263,12 +276,20 @@ class FreeCADSocketBridge:
             "platform": sys.platform,
         })
 
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+
         while True:
             try:
                 cmd = self.read_command()
                 if cmd is None:
+                    consecutive_errors += 1
+                    if consecutive_errors > max_consecutive_errors:
+                        self._log("Too many empty reads, shutting down...")
+                        break
                     continue
 
+                consecutive_errors = 0  # reset on success
                 action = cmd.get("action", "")
 
                 if action == "exit" or action == "quit":
@@ -293,10 +314,13 @@ class FreeCADSocketBridge:
                     self.send_error(str(e), traceback.format_exc())
 
             except EOFError:
+                self._log("EOFError — stdin closed")
                 break
             except KeyboardInterrupt:
+                self._log("KeyboardInterrupt — shutting down")
                 break
             except Exception as e:
+                self._log(f"Fatal bridge error: {e}")
                 self.send_error(f"Fatal bridge error: {e}", traceback.format_exc())
                 break
 

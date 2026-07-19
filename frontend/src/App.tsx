@@ -492,6 +492,8 @@ export default function App() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let parseGuard = 0;
+      const MAX_PARSE_LOOPS = 1000; // safety: max 1000 event per chunk
 
       while (true) {
         const { done, value } = await reader.read();
@@ -503,7 +505,15 @@ export default function App() {
         // SSE spec: event dipisah oleh \n\n (double newline)
         // Tapi data JSON bisa mengandung \n — jadi kita harus parse
         // line-by-line, bukan split by \n\n
+        parseGuard = 0;
         while (true) {
+          parseGuard++;
+          if (parseGuard > MAX_PARSE_LOOPS) {
+            console.warn('⚠️ SSE parse loop exceeded max — clearing buffer');
+            buffer = '';
+            break;
+          }
+
           // Cari double newline sebagai pemisah event
           const doubleNl = buffer.indexOf('\n\n');
           if (doubleNl === -1) break; // belum ada event lengkap
@@ -591,6 +601,9 @@ export default function App() {
 
             case 'done':
               // Final text already accumulated via tokens
+              // Pastiin loading mati — event done adalah sinyal bahwa stream selesai
+              // Tapi jangan setLoading(false) langsung di sini karena masih di dalam
+              // loop reader. Biar finally block yang handle.
               break;
 
             case 'error':
@@ -618,7 +631,12 @@ export default function App() {
         return msgs;
       });
     } finally {
-      setLoading(false);
+      // 💾 Pastiin loading mati — pakai setTimeout biar React sempat batch
+      // TAPI pastiin gak ada race condition: kalau ada error di stream,
+      // loading harus tetap mati meski onDone gak pernah dipanggil
+      setTimeout(() => {
+        setLoading(false);
+      }, 100); // kasih delay 100ms biar event 'done' sempat diproses dulu
     }
   }, []); // ⬅️ EMPTY array — semua state diakses via refs, jadi handleSend STABLE selamanya!
 

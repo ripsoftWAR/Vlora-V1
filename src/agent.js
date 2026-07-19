@@ -346,69 +346,131 @@ export class Agent {
     let loopGuard = 0;
     const MAX_TOOL_LOOPS = 10; // safety: max 10 tool call rounds
 
+    // 🛡️ Error boundary — wrap seluruh loop biar error apapun
+    // gak bikin chat ilang. Kalau error, kita simpan dulu progress
+    // ke memory, baru throw ke caller.
+    try {
     while (continueLoop) {
       loopGuard++;
       if (loopGuard > MAX_TOOL_LOOPS) {
         console.warn('⚠️ Tool call loop exceeded max iterations — breaking');
         if (onError) onError(new Error('Tool call loop terlalu panjang'));
+        // 💾 Flush memory sebelum break biar progress gak ilang
+        try {
+          const session = await this.memory.getOrCreateSession(this.projectPath);
+          await this.memory._save(this.projectPath, session);
+        } catch {}
         break;
       }
 
       // ── Real streaming via SSE ─────────────────────────────────
-      const stream = this.callAPIStream({ systemPrompt, messages: this.conversationHistory, tools });
+      let stream;
+      try {
+        stream = this.callAPIStream({ systemPrompt, messages: this.conversationHistory, tools });
+      } catch (err) {
+        console.error('❌ Gagal initiate stream:', err.message);
+        if (onError) onError(err);
+        // 💾 Flush memory sebelum exit
+        try {
+          const session = await this.memory.getOrCreateSession(this.projectPath);
+          await this.memory._save(this.projectPath, session);
+        } catch {}
+        // ✅ Pastiin onDone dipanggil biar frontend gak loading forever
+        if (onDone) onDone(finalText || '');
+        break;
+      }
 
       let content = '';
       const toolCallMap = {};  // index → accumulated tool_call
       let streamComplete = false;
 
-      for await (const chunk of stream) {
-        const delta = chunk.choices?.[0]?.delta;
-        if (!delta) continue;
+      try {
+        for await (const chunk of stream) {
+          const delta = chunk.choices?.[0]?.delta;
+          if (!delta) continue;
 
-        // ── Text token ──────────────────────────────────────────
-        // DeepSeek V4 Flash kirim reasoning_content duluan sebelum content
-        // Kita tangkap reasoning_content sebagai fallback text
-        if (delta.content) {
-          content += delta.content;
-          if (onToken) onToken(delta.content);
-        } else if (delta.reasoning_content) {
-          // DeepSeek reasoning — tampilkan juga biar user lihat proses berpikir
-          content += delta.reasoning_content;
-          if (onToken) onToken(delta.reasoning_content);
-        }
+          // ── Text token ──────────────────────────────────────────
+          // DeepSeek V4 Flash kirim reasoning_content duluan sebelum content
+          // Kita tangkap reasoning_content sebagai fallback text
+          if (delta.content) {
+            content += delta.content;
+            if (onToken) onToken(delta.content);
+          } else if (delta.reasoning_content) {
+            // DeepSeek reasoning — tampilkan juga biar user lihat proses berpikir
+            content += delta.reasoning_content;
+            if (onToken) onToken(delta.reasoning_content);
+          }
 
-        // ── Tool call delta ─────────────────────────────────────
-        if (delta.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            if (!toolCallMap[idx]) {
-              toolCallMap[idx] = {
-                id: tc.id || '',
-                type: 'function',
-                function: { name: '', arguments: '' },
-              };
+          // ── Tool call delta ─────────────────────────────────────
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!toolCallMap[idx]) {
+                toolCallMap[idx] = {
+                  id: tc.id || '',
+                  type: 'function',
+                  function: { name: '', arguments: '' },
+                };
+              }
+              const entry = toolCallMap[idx];
+              if (tc.id) entry.id = tc.id;
+              if (tc.function?.name) entry.function.name += tc.function.name;
+              if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
             }
-            const entry = toolCallMap[idx];
-            if (tc.id) entry.id = tc.id;
-            if (tc.function?.name) entry.function.name += tc.function.name;
-            if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+          }
+
+          // ── Finish reason ───────────────────────────────────────
+          const finishReason = chunk.choices?.[0]?.finish_reason;
+          if (finishReason === 'stop' || finishReason === 'tool_calls') {
+            streamComplete = true;
           }
         }
-
-        // ── Finish reason ───────────────────────────────────────
-        const finishReason = chunk.choices?.[0]?.finish_reason;
-        if (finishReason === 'stop' || finishReason === 'tool_calls') {
-          streamComplete = true;
-        }
+      } catch (err) {
+        console.error('❌ Stream iteration error:', err.message);
+        if (onError) onError(err);
+        // 💾 Flush memory — jangan sampai progress ilang
+        try {
+          const session = await this.memory.getOrCreateSession(this.projectPath);
+          await this.memory._save(this.projectPath, session);
+        } catch {}
+        // ✅ Pastiin onDone dipanggil biar frontend gak loading forever
+        if (onDone) onDone(finalText || '');
+        break;
       }
 
       // ── Fallback: kalau finish_reason gak dikirim, cek toolCalls ──
       const toolCalls = Object.values(toolCallMap);
 
+      // 🛡️ Safety: kalau stream selesai tanpa content dan tanpa tool_calls,
+      // jangan lanjut loop — bisa infinite loop
+      if (!content && toolCalls.length === 0 && streamComplete) {
+        console.warn('⚠️ Stream selesai tanpa output — breaking loop');
+        if (onError) onError(new Error('Stream selesai tanpa output'));
+        // ✅ Pastiin onDone dipanggil biar frontend gak loading forever
+        if (onDone) onDone(finalText || '');
+        continueLoop = false;
+        break;
+      }
+
       if (toolCalls.length > 0) {
         // ── Tool call path ──────────────────────────────────────
         const message = { role: 'assistant', tool_calls: toolCalls };
         this.conversationHistory.push(message);
+
+        // 💾 Simpan assistant message dengan tool_calls ke memory
+        // Biar kalau server restart di tengah tool call loop, progress gak ilang
+        await this.memory.addMessage(this.projectPath, {
+          role: 'assistant',
+          content: '',
+          tool_calls: toolCalls.map(tc => ({
+            id: tc.id,
+            type: tc.type,
+            function: {
+              name: tc.function.name,
+              arguments: tc.function.arguments,
+            }
+          })),
+        });
 
         for (const tc of toolCalls) {
           const name = tc.function.name;
@@ -437,6 +499,13 @@ export class Agent {
             tool_call_id: tc.id,
             content: typeof result === 'string' ? result : JSON.stringify(result),
           });
+
+          // 💾 Simpan tool result ke memory — biar aman kalau ada apa-apa
+          await this.memory.addMessage(this.projectPath, {
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: typeof result === 'string' ? result : JSON.stringify(result),
+          });
         }
 
       } else {
@@ -455,10 +524,43 @@ export class Agent {
         if (this.conversationHistory.length > 20) await this._summarizeMemory(systemPrompt);
         continueLoop = false;
       }
+
+      // 💾 Safety: flush memory setiap selesai 1 iterasi loop
+      // Biar kalau server crash di tengah, progress terakhir tetap tersimpan
+      try {
+        const session = await this.memory.getOrCreateSession(this.projectPath);
+        // Update conversationHistory di session memory
+        // Ini penting: memory.addMessage udah nambahin, tapi kita pastikan
+        // session terbaru tersimpan dengan semua data
+        session.conversationHistory = this.conversationHistory;
+        await this.memory._save(this.projectPath, session);
+      } catch {} // silent — jangan sampai error memory ngebreak loop
     }
 
     if (onDone) onDone(finalText);
     return finalText;
+    } catch (err) {
+      // 🛡️ Error boundary catch — simpan progress sebelum throw
+      console.error('❌ Fatal error di chatStream:', err.message);
+      if (onError) onError(err);
+      
+      // 💾 Flush memory — jangan sampai progress ilang
+      try {
+        const session = await this.memory.getOrCreateSession(this.projectPath);
+        await this.memory._save(this.projectPath, session);
+      } catch {}
+      
+      // ✅ Pastiin onDone dipanggil biar frontend gak loading forever
+      if (onDone) onDone(finalText || '');
+      
+      throw err;
+    } finally {
+      // 💾 Final flush — pastikan semua tersimpan
+      try {
+        const session = await this.memory.getOrCreateSession(this.projectPath);
+        await this.memory._save(this.projectPath, session);
+      } catch {}
+    }
   }
 
   /**

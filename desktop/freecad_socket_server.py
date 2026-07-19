@@ -1,6 +1,6 @@
 """
-freecad_socket_server.py — FreeCAD Socket Server v2 (NO-THREAD, SELECT-BASED)
-============================================================================
+freecad_socket_server.py — FreeCAD Socket Server v3 (QTIMER-BASED)
+====================================================================
 
 CARA PAKAI (Pilih salah satu):
   1. Di Python Console FreeCAD:
@@ -12,16 +12,16 @@ CARA PAKAI (Pilih salah satu):
 
 CARA KERJA:
   - Server TCP di port 9998
-  - SELECT-based (single thread, non-blocking)
+  - QTimer-based (tidak blocking GUI FreeCAD)
   - Terima JSON command dari Flora Agent
   - Eksekusi kode Python di FreeCAD context
   - Kirim response JSON balik
 
-PERBEDAAN DARI V1:
-  ❌ Tidak pakai threading (sering silent-fail di FreeCAD embedded Python)
-  ✅ Single-thread select() loop — lebih stabil
-  ✅ Flush stdout setiap print agar terlihat di console FreeCAD
-  ✅ Auto-restart port jika masih terpakai
+PERBEDAAN DARI V2:
+  ❌ Tidak pakai while True + sleep (blocking GUI → crash/not responding)
+  ✅ QTimer-based — loop jalan sebagai timer, GUI FreeCAD tetap responsif
+  ✅ Non-blocking socket — select.select() dengan timeout 0
+  ✅ Aman untuk FreeCAD embedded Python
 """
 
 import FreeCAD as App
@@ -34,15 +34,22 @@ import sys
 import os
 import json
 import socket
-
+import select
 import traceback
 import math
 from math import radians, degrees
+import time as _time_mod
 
 # ── Konfigurasi ──────────────────────────────────────────────
 HOST = "127.0.0.1"
 PORT = 9998
 WORKSPACE_DIR = os.path.join(os.path.expanduser("~"), "VloraWorkspace", "models")
+
+# ── Global state ─────────────────────────────────────────────
+_server = None
+_clients = {}  # {socket: buffer}
+_timer = None
+_running = False
 
 # ── Namespace untuk exec() ───────────────────────────────────
 GLOBALS_SCOPE = {
@@ -52,7 +59,7 @@ GLOBALS_SCOPE = {
     "os": os, "json": json, "math": math,
     "radians": radians, "degrees": degrees,
     "Vector": App.Vector, "Matrix": App.Matrix, "Rotation": App.Rotation,
-    "Placement": App.Placement, "time": __import__("time"),
+    "Placement": App.Placement, "time": _time_mod,
 }
 
 # ── Print helper (flush agar kelihatan di FreeCAD console) ───
@@ -170,7 +177,6 @@ def process_command(cmd):
             try:
                 exec(_HELPERS_CODE, ns)
                 exec(code, ns)
-                # Auto-recompute
                 for d in App.listDocuments().values():
                     d.recompute()
                 return {"success": True, "result": "ok"}
@@ -246,66 +252,42 @@ def process_command(cmd):
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
 
-# ── Main server loop (select-based, single thread) ──────────
-def run_server():
-    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+# ── Timer callback — dipanggil setiap 50ms ──────────────────
+def _timer_tick():
+    global _server, _clients, _running
     
-    # Tentukan port — coba 9998 dulu, fallback ke 9997
-    port = PORT
+    if not _running or _server is None:
+        return
     
-    # Buat server socket
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.setblocking(False)
-    
-    # Coba bind
-    for attempt in range(3):
-        try:
-            server.bind((HOST, port))
-            break
-        except OSError:
-            _p(f"[FreeCAD] Port {port} masih terpakai, coba lain...")
-            time.sleep(1)
-            port = 9997
-    else:
-        server.bind((HOST, port))
-    
-    server.listen(5)
-    server.settimeout(0.5)
-    
-    _p("")
-    _p("=" * 50)
-    _p("  🧊 FreeCAD Socket Server v2 AKTIF!")
-    _p("     Host: " + str(HOST))
-    _p("     Port: " + str(port))
-    _p("     PID: " + str(os.getpid()))
-    _p("     Documents: " + str(len(App.listDocuments())))
-    _p("=" * 50)
-    _p("")
-    
-    clients = {}  # {socket: buffer}
-    
-    while True:
-        # Accept new connections
-        try:
-            client, addr = server.accept()
-            client.setblocking(False)
-            clients[client] = b""
-            _p(f"[FreeCAD] Client terhubung: {addr}")
-        except (BlockingIOError, socket.timeout):
-            pass
-        except Exception as e:
-            _p(f"[FreeCAD] Accept error: {e}")
-            continue
-        
-        # Process existing clients
-        to_remove = []
-        for client, buf in clients.items():
+    try:
+        # ── Accept new connections ──
+        readable, _, _ = select.select([_server], [], [], 0)
+        if readable:
             try:
+                client, addr = _server.accept()
+                client.setblocking(True)
+                client.settimeout(5.0)
+                _clients[client] = b""
+                _p(f"[FreeCAD] Client terhubung: {addr}")
+            except (BlockingIOError, socket.timeout):
+                pass
+            except Exception as e:
+                _p(f"[FreeCAD] Accept error: {e}")
+        
+        # ── Process existing clients ──
+        to_remove = []
+        for client, buf in list(_clients.items()):
+            try:
+                # Check if client has data
+                r, _, _ = select.select([client], [], [], 0)
+                if not r:
+                    continue
+                
                 data = client.recv(65536)
                 if not data:
                     to_remove.append(client)
                     continue
+                
                 buf += data
                 
                 # Process complete messages (separated by \n)
@@ -326,7 +308,7 @@ def run_server():
                             "success": False, "error": "Invalid JSON"
                         }).encode() + b'\n')
                 
-                clients[client] = buf
+                _clients[client] = buf
                 
             except (BlockingIOError, socket.timeout):
                 continue
@@ -338,23 +320,105 @@ def run_server():
                 c.close()
             except:
                 pass
-            clients.pop(c, None)
+            _clients.pop(c, None)
             if to_remove:
-                _p(f"[FreeCAD] Client disconnect ({len(clients)} remaining)")
-        
-        # Sleep sedikit agar tidak busy-loop
-        time.sleep(0.01)
+                _p(f"[FreeCAD] Client disconnect ({len(_clients)} remaining)")
+    
+    except Exception as e:
+        _p(f"[FreeCAD] Timer error: {e}")
+        traceback.print_exc()
+
+
+# ── Start server ────────────────────────────────────────────
+def start_server():
+    global _server, _clients, _timer, _running
+    
+    if _running:
+        _p("[FreeCAD] Server sudah berjalan!")
+        return
+    
+    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+    
+    # Buat server socket
+    _server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    _server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    _server.setblocking(False)
+    
+    # Coba bind
+    port = PORT
+    for attempt in range(3):
+        try:
+            _server.bind((HOST, port))
+            break
+        except OSError:
+            _p(f"[FreeCAD] Port {port} masih terpakai, coba lain...")
+            _time_mod.sleep(1)
+            port = 9997
+    else:
+        try:
+            _server.bind((HOST, port))
+        except OSError as e:
+            _p(f"[FreeCAD] Gagal bind port: {e}")
+            return
+    
+    _server.listen(5)
+    _clients = {}
+    _running = True
+    
+    _p("")
+    _p("=" * 50)
+    _p("  🧊 FreeCAD Socket Server v3 AKTIF!")
+    _p("     Host: " + str(HOST))
+    _p("     Port: " + str(port))
+    _p("     PID: " + str(os.getpid()))
+    _p("     Documents: " + str(len(App.listDocuments())))
+    _p("=" * 50)
+    _p("")
+    _p("  ⚡ QTimer-based — GUI FreeCAD tetap responsif!")
+    _p("")
+    
+    # ── QTimer — jalan setiap 50ms, gak blocking GUI ──
+    from PySide.QtCore import QTimer
+    _timer = QTimer()
+    _timer.timeout.connect(_timer_tick)
+    _timer.start(50)  # 50ms interval
+
+
+# ── Stop server ─────────────────────────────────────────────
+def stop_server():
+    global _server, _clients, _timer, _running
+    
+    _running = False
+    
+    if _timer:
+        try:
+            _timer.stop()
+        except:
+            pass
+        _timer = None
+    
+    # Tutup semua client
+    for c in list(_clients.keys()):
+        try:
+            c.close()
+        except:
+            pass
+    _clients = {}
+    
+    if _server:
+        try:
+            _server.close()
+        except:
+            pass
+        _server = None
+    
+    _p("[FreeCAD] Server stopped.")
 
 
 # ── START! ──────────────────────────────────────────────────
-import time as _time
-time = _time  # inject ke scope
-
-_p("[FreeCAD] Starting select-based server (no threading)...")
+_p("[FreeCAD] Starting QTimer-based server...")
 try:
-    run_server()
-except KeyboardInterrupt:
-    _p("[FreeCAD] Server stopped by user")
+    start_server()
 except Exception as e:
     _p(f"[FreeCAD] Server fatal error: {e}")
     traceback.print_exc()

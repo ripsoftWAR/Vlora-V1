@@ -272,10 +272,41 @@ export class Memory {
 
   async addMessage(projectPath, message) {
     const mem = await this._load(projectPath);
-    mem.messages.push({
+    
+    // Simpan message dengan semua field termasuk tool_calls
+    const msgToStore = {
       ...message,
       timestamp: new Date().toISOString(),
-    });
+    };
+
+    // Kalau ini tool message, cek apakah tool_call_id sudah ada di history
+    // Kalau sudah ada, update (jangan duplikat)
+    if (message.role === 'tool' && message.tool_call_id) {
+      const existingIdx = mem.messages.findIndex(
+        m => m.role === 'tool' && m.tool_call_id === message.tool_call_id
+      );
+      if (existingIdx >= 0) {
+        mem.messages[existingIdx] = msgToStore;
+        await this._save(projectPath, mem);
+        return;
+      }
+    }
+
+    // Kalau ini assistant dengan tool_calls, cek apakah sudah ada
+    // (bisa terjadi kalau loop restart)
+    if (message.role === 'assistant' && message.tool_calls) {
+      const existingIdx = mem.messages.findIndex(
+        m => m.role === 'assistant' && m.tool_calls && 
+             m.tool_calls[0]?.id === message.tool_calls[0]?.id
+      );
+      if (existingIdx >= 0) {
+        mem.messages[existingIdx] = msgToStore;
+        await this._save(projectPath, mem);
+        return;
+      }
+    }
+
+    mem.messages.push(msgToStore);
 
     // Keep last 100 messages
     if (mem.messages.length > 100) {
@@ -283,7 +314,7 @@ export class Memory {
     }
 
     // Auto-extract facts, decisions, preferences dari assistant messages
-    if (message.role === 'assistant') {
+    if (message.role === 'assistant' && message.content) {
       await this._extractKnowledge(mem, message.content);
     }
 
